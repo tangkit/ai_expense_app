@@ -2,27 +2,32 @@
    Expense Claim Assistant - Main Styles
    =================================== */
 
-/* CSS Variables */
+/* CSS Variables - Modern Dark Blue Theme */
 :root {
-  --primary-color: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-light: #dbeafe;
-  --secondary-color: #64748b;
+  --primary-color: #3b82f6;
+  --primary-hover: #60a5fa;
+  --primary-light: rgba(59, 130, 246, 0.15);
+  --primary-glow: rgba(59, 130, 246, 0.3);
+  --secondary-color: #8b5cf6;
   --success-color: #10b981;
   --warning-color: #f59e0b;
   --error-color: #ef4444;
-  --background: #f8fafc;
-  --surface: #ffffff;
-  --surface-secondary: #f1f5f9;
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
-  --text-muted: #94a3b8;
-  --border-color: #e2e8f0;
+  --background: #0f172a;
+  --background-secondary: #1e293b;
+  --surface: #1e293b;
+  --surface-secondary: #334155;
+  --surface-hover: #475569;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border-color: #334155;
+  --border-light: #475569;
   --border-radius: 12px;
   --border-radius-sm: 8px;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.15);
   --transition: all 0.2s ease;
 }
 
@@ -58,13 +63,14 @@ body {
 }
 
 .app-header {
-  background: linear-gradient(135deg, var(--primary-color) 0%, #3b82f6 100%);
+  background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%);
+  border-bottom: 1px solid var(--border-color);
   color: white;
   padding: 16px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-glow);
 }
 
 .app-header .logo {
@@ -105,7 +111,7 @@ body {
 .sidebar-panel {
   width: 380px;
   border-left: 1px solid var(--border-color);
-  background: var(--surface);
+  background: var(--background-secondary);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -127,7 +133,7 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--surface-secondary);
+  background: var(--background);
 }
 
 .messages-container {
@@ -179,11 +185,13 @@ body {
 .message.assistant .message-avatar {
   background: var(--primary-light);
   color: var(--primary-color);
+  border: 1px solid var(--primary-color);
 }
 
 .message.user .message-avatar {
-  background: var(--text-primary);
-  color: white;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
 }
 
 .message-content {
@@ -191,11 +199,13 @@ body {
   padding: 12px 16px;
   border-radius: var(--border-radius);
   box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-color);
 }
 
 .message.user .message-content {
-  background: var(--primary-color);
+  background: linear-gradient(135deg, var(--primary-color) 0%, #2563eb 100%);
   color: white;
+  border: none;
 }
 
 .message-content.processing {
@@ -244,7 +254,7 @@ body {
   display: flex;
   gap: 12px;
   padding: 16px 24px;
-  background: var(--surface);
+  background: var(--background-secondary);
   border-top: 1px solid var(--border-color);
 }
 
@@ -256,11 +266,17 @@ body {
   font-size: 0.9375rem;
   outline: none;
   transition: var(--transition);
+  background: var(--surface);
+  color: var(--text-primary);
+}
+
+.chat-input::placeholder {
+  color: var(--text-muted);
 }
 
 .chat-input:focus {
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px var(--primary-light);
+  box-shadow: 0 0 0 3px var(--primary-glow);
 }
 
 .chat-input:disabled {
@@ -282,13 +298,15 @@ body {
 }
 
 .attach-button {
-  background: var(--surface-secondary);
+  background: var(--surface);
   color: var(--text-secondary);
+  border: 1px solid var(--border-color);
 }
 
 .attach-button:hover:not(:disabled) {
-  background: var(--border-color);
-  color: var(--text-primary);
+  background: var(--surface-hover);
+  color: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
 .send-button {
@@ -1310,16 +1328,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--surface-secondary);
+  background: var(--background);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--border-color);
+  background: var(--surface-secondary);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
+  background: var(--primary-color);
 }
 
 /* ===================================
@@ -1628,7 +1646,7 @@ body {
    =================================== */
 .claim-info-summary {
   padding: 16px 20px;
-  background: linear-gradient(135deg, var(--primary-light) 0%, #dbeafe 100%);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
   border-bottom: 1px solid var(--border-color);
 }
 
