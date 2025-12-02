@@ -9,13 +9,17 @@ import TemplateUpload from './TemplateUpload';
 import { parseReceipt } from '../services/receiptParser';
 import { EXPENSE_CATEGORIES, MEAL_COMPANION_THRESHOLD } from '../constants/expenseTypes';
 
-const WELCOME_MESSAGE = `Hello! I'm your Expense Claim Assistant. I can help you:
+const WELCOME_MESSAGE = `Welcome to Tang's Expense Claim Assistant.
 
+Let me help you input your expense claims:
+
+• **Import company template** - Upload your company's expense template for customized exports
+• **Purpose of your business trip** - Just drag & drop or click to upload receipts and invoices
+• **Local currency to target conversion** - Input as local currency and convert to target currency (per OANDA exchange rate)
 • **Upload receipts** - Just drag & drop or click to upload receipts and invoices
 • **Extract information** - I'll automatically parse vendor, amount, date, and category
 • **Itemize hotel stays** - I break down hotel bills by night with all fees
-• **Track meal companions** - For meals over $25, I'll help you record who you dined with
-• **Import company template** - Upload your company's expense template for customized exports
+• **Track meals & customers** - For meals over $25, I'll help you record who you dined with
 • **Export to PDF/Excel** - Generate professional expense reports with receipts attached
 
 How can I help you today? Start by setting up your expense claim details or uploading a receipt!`;
