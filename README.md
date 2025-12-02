@@ -1,16 +1,82 @@
-# React + Vite
+# AI Expense Claim Assistant
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+An intelligent expense-claim chatbot application built with React. The system enables users to upload receipts and invoices for business-trip expenses and automatically parses, identifies, and extracts key information using AI-based field recognition.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Receipt Upload**: Drag-and-drop support for images (JPG, PNG) and PDF documents
+- **AI-Powered Extraction**: Automatically detects vendor, amount, date, and expense category
+- **Expense Categories**: Taxi, rideshare, hotel, flight, meals, parking, toll, car rental, fuel, and more
+- **Hotel Itemization**: Per-night breakdown with room rate, taxes, service charges, and fees
+- **Meal Compliance**: Captures companion information for meals exceeding $25
+- **Spreadsheet Export**: Generates Excel reports matching company expense templates
 
-## React Compiler
+## Project Structure
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```
+ai_expense_app/
+├── frontend/           # React application
+│   ├── src/
+│   │   ├── components/ # React components
+│   │   ├── context/    # State management
+│   │   ├── services/   # Business logic
+│   │   └── constants/  # Configuration
+│   ├── package.json
+│   └── vite.config.js
+└── README.md
+```
 
-## Expanding the ESLint configuration
+## Getting Started
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Prerequisites
+
+- Node.js 18+
+- npm or yarn
+
+### Installation
+
+```bash
+cd frontend
+npm install
+```
+
+### Development
+
+```bash
+cd frontend
+npm run dev
+```
+
+### Build
+
+```bash
+cd frontend
+npm run build
+```
+
+## Special Handling
+
+### Hotel Receipts
+The system itemizes hotel stays on a per-day basis, recording:
+- Nightly room rate
+- Applicable taxes
+- Service charges
+- Resort/amenity fees
+- Parking fees
+- Other itemized charges
+
+### Meals Over $25
+For compliance and audit purposes, meals exceeding $25 require:
+- Companion/customer name
+- Business purpose
+- Number of attendees (optional)
+- Discussion topics (optional)
+
+## Tech Stack
+
+- React 19
+- Vite
+- date-fns
+- xlsx (for Excel export)
+- react-dropzone
+- lucide-react (icons)
