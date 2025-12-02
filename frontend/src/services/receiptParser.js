@@ -1,16 +1,17 @@
 import { EXPENSE_CATEGORIES } from '../constants/expenseTypes';
 import { v4 as uuidv4 } from 'uuid';
 import { format, addDays } from 'date-fns';
+import { parseReceiptWithBackend, checkBackendHealth } from './api';
 
 /**
- * Simulates AI/OCR-based receipt parsing
- * In a production environment, this would integrate with:
- * - Google Cloud Vision API
- * - AWS Textract
- * - Azure Form Recognizer
- * - OpenAI Vision API
- * - Tesseract.js for client-side OCR
+ * Receipt parsing service with backend AI support.
+ * Falls back to simulated parsing when backend is unavailable.
  */
+
+// Cache backend availability status
+let backendAvailable = null;
+let lastHealthCheck = 0;
+const HEALTH_CHECK_INTERVAL = 30000; // 30 seconds
 
 // Vendor patterns for category detection
 const VENDOR_PATTERNS = {
@@ -124,11 +125,119 @@ function generateHotelItemization(checkIn, checkOut, totalAmount, taxRate = 0.12
 }
 
 /**
+ * Check if backend is available (with caching)
+ */
+async function isBackendAvailable() {
+  const now = Date.now();
+  if (backendAvailable !== null && (now - lastHealthCheck) < HEALTH_CHECK_INTERVAL) {
+    return backendAvailable;
+  }
+
+  try {
+    backendAvailable = await checkBackendHealth();
+    lastHealthCheck = now;
+    return backendAvailable;
+  } catch {
+    backendAvailable = false;
+    lastHealthCheck = now;
+    return false;
+  }
+}
+
+/**
+ * Transform backend response to frontend format
+ */
+function transformBackendResponse(response, file) {
+  if (!response.success || !response.expense) {
+    return null;
+  }
+
+  const expense = response.expense;
+
+  // Transform hotel itemization
+  let hotelItemization = null;
+  if (expense.hotel_itemization && expense.hotel_itemization.length > 0) {
+    hotelItemization = expense.hotel_itemization.map(night => ({
+      id: uuidv4(),
+      nightDate: night.night_date,
+      roomRate: parseFloat(night.room_rate),
+      roomTax: parseFloat(night.room_tax),
+      serviceCharge: parseFloat(night.service_charge),
+      resortFee: parseFloat(night.resort_fee),
+      parkingFee: parseFloat(night.parking_fee),
+      otherFees: parseFloat(night.other_fees),
+      dailyTotal: parseFloat(night.room_rate) + parseFloat(night.room_tax) +
+                  parseFloat(night.service_charge) + parseFloat(night.resort_fee) +
+                  parseFloat(night.parking_fee) + parseFloat(night.other_fees)
+    }));
+  }
+
+  return {
+    id: uuidv4(),
+    fileName: file.name,
+    fileType: file.type,
+    fileSize: file.size,
+    uploadedAt: new Date().toISOString(),
+    confidence: expense.confidence_score || 0.9,
+    rawText: response.raw_text || '',
+    extracted: {
+      vendor: expense.vendor,
+      category: expense.category,
+      date: expense.expense_date,
+      checkInDate: expense.check_in_date,
+      checkOutDate: expense.check_out_date,
+      amount: parseFloat(expense.subtotal),
+      tax: parseFloat(expense.tax),
+      total: parseFloat(expense.total),
+      currency: expense.currency || 'USD',
+      receiptNumber: expense.receipt_number || '',
+      paymentMethod: expense.payment_method || '',
+      description: expense.description || ''
+    },
+    requiresCompanion: expense.requires_companion,
+    hotelItemization
+  };
+}
+
+/**
  * Parse receipt file and extract expense data
+ * @param {File} file - The uploaded receipt file
+ * @param {boolean} forceSimulated - Force use of simulated parsing
+ * @returns {Promise<Object>} - Parsed expense data
+ */
+export async function parseReceipt(file, forceSimulated = false) {
+  // Try backend API first if available
+  if (!forceSimulated) {
+    const useBackend = await isBackendAvailable();
+
+    if (useBackend) {
+      try {
+        console.log('Using backend AI for receipt parsing...');
+        const response = await parseReceiptWithBackend(file);
+        const transformed = transformBackendResponse(response, file);
+
+        if (transformed) {
+          return transformed;
+        }
+        // Fall through to simulated if transformation failed
+        console.warn('Backend response transformation failed, using simulated parsing');
+      } catch (error) {
+        console.warn('Backend parsing failed, falling back to simulated:', error.message);
+      }
+    }
+  }
+
+  // Fallback to simulated parsing
+  console.log('Using simulated receipt parsing...');
+  return parseReceiptSimulated(file);
+}
+
+/**
+ * Simulated receipt parsing (fallback when backend unavailable)
  * @param {File} file - The uploaded receipt file
  * @returns {Promise<Object>} - Parsed expense data
  */
-export async function parseReceipt(file) {
+export async function parseReceiptSimulated(file) {
   return new Promise((resolve) => {
     // Simulate AI processing delay
     setTimeout(() => {

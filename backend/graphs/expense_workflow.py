@@ -1,0 +1,438 @@
+"""LangGraph workflow for expense receipt processing."""
+
+import json
+import base64
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Annotated, TypedDict, Literal, Any
+
+from langgraph.graph import StateGraph, END
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from config import settings
+from api.schemas.expense import (
+    ExpenseCategory,
+    ExtractedExpense,
+    HotelNightItem,
+    MealCompanionInfo,
+)
+from prompts.templates import (
+    RECEIPT_EXTRACTION_PROMPT,
+    HOTEL_ITEMIZATION_PROMPT,
+    VALIDATION_PROMPT,
+    RECEIPT_PARSER_SYSTEM,
+    HOTEL_SPECIALIST_SYSTEM,
+    VALIDATOR_SYSTEM,
+)
+
+
+def get_llm():
+    """Get the configured LLM instance."""
+    if settings.llm_provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+
+        return ChatAnthropic(
+            model=settings.anthropic_model,
+            api_key=settings.anthropic_api_key,
+            max_tokens=4096,
+        )
+    else:
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(
+            model=settings.openai_model,
+            api_key=settings.openai_api_key,
+            max_tokens=4096,
+        )
+
+
+class ExpenseWorkflowState(TypedDict):
+    """State for the expense processing workflow."""
+
+    # Input
+    file_content_base64: str
+    file_type: str
+    file_name: str
+
+    # Processing stages
+    raw_text: str | None
+    extracted_data: dict | None
+    category: str | None
+    hotel_itemization: list[dict] | None
+
+    # Output
+    expense: ExtractedExpense | None
+    validation_errors: list[str]
+    validation_warnings: list[str]
+
+    # Metadata
+    confidence_score: float
+    processing_stage: str
+    error: str | None
+
+
+def parse_receipt(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
+    """Parse the receipt using vision LLM."""
+    llm = get_llm()
+
+    file_content = state["file_content_base64"]
+    file_type = state["file_type"]
+
+    # Build the message with image content
+    if file_type.startswith("image/"):
+        # For images, use vision capabilities
+        content = [
+            {"type": "text", "text": RECEIPT_EXTRACTION_PROMPT.format(receipt_content="[See attached image]")},
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{file_type};base64,{file_content}"},
+            },
+        ]
+    else:
+        # For PDFs or text, we'd need OCR first (simplified for now)
+        content = [
+            {
+                "type": "text",
+                "text": RECEIPT_EXTRACTION_PROMPT.format(
+                    receipt_content="[PDF document - please extract text and analyze]"
+                ),
+            }
+        ]
+
+    messages = [
+        SystemMessage(content=RECEIPT_PARSER_SYSTEM),
+        HumanMessage(content=content),
+    ]
+
+    try:
+        response = llm.invoke(messages)
+        response_text = response.content
+
+        # Extract JSON from response
+        extracted_data = extract_json_from_response(response_text)
+
+        if extracted_data:
+            state["extracted_data"] = extracted_data
+            state["category"] = extracted_data.get("category", "other")
+            state["raw_text"] = response_text
+            state["confidence_score"] = 0.85
+            state["processing_stage"] = "parsed"
+        else:
+            state["error"] = "Failed to extract structured data from receipt"
+            state["processing_stage"] = "error"
+
+    except Exception as e:
+        state["error"] = f"Receipt parsing failed: {str(e)}"
+        state["processing_stage"] = "error"
+
+    return state
+
+
+def extract_json_from_response(text: str) -> dict | None:
+    """Extract JSON object from LLM response text."""
+    # Try to find JSON in the response
+    try:
+        # First, try direct parsing
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Try to find JSON block in markdown
+    import re
+
+    json_match = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
+    if json_match:
+        try:
+            return json.loads(json_match.group(1))
+        except json.JSONDecodeError:
+            pass
+
+    # Try to find raw JSON object
+    json_match = re.search(r"\{[\s\S]*\}", text)
+    if json_match:
+        try:
+            return json.loads(json_match.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
+def categorize_expense(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
+    """Verify and potentially correct the expense category."""
+    if state.get("error"):
+        return state
+
+    extracted = state.get("extracted_data", {})
+    vendor = extracted.get("vendor", "")
+    category = extracted.get("category", "other")
+
+    # Validate category is one of our known categories
+    valid_categories = [c.value for c in ExpenseCategory]
+    if category not in valid_categories:
+        category = "other"
+
+    state["category"] = category
+    state["processing_stage"] = "categorized"
+
+    return state
+
+
+def itemize_hotel(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
+    """Generate per-night itemization for hotel receipts."""
+    if state.get("error"):
+        return state
+
+    if state.get("category") != "hotel":
+        state["processing_stage"] = "itemized"
+        return state
+
+    extracted = state.get("extracted_data", {})
+    llm = get_llm()
+
+    # Check if itemization already exists
+    if extracted.get("hotel_nights"):
+        state["hotel_itemization"] = extracted["hotel_nights"]
+        state["processing_stage"] = "itemized"
+        return state
+
+    # Generate itemization using LLM
+    check_in = extracted.get("check_in_date")
+    check_out = extracted.get("check_out_date")
+    total = extracted.get("total", 0)
+
+    if not check_in or not check_out:
+        # Try to infer from expense date and calculate single night
+        expense_date = extracted.get("expense_date", str(date.today()))
+        state["hotel_itemization"] = [
+            {
+                "night_date": expense_date,
+                "room_rate": float(total) * 0.85,  # Estimate 85% base rate
+                "room_tax": float(total) * 0.12,  # Estimate 12% tax
+                "service_charge": float(total) * 0.03,  # Estimate 3% service
+                "resort_fee": 0,
+                "parking_fee": 0,
+                "other_fees": 0,
+            }
+        ]
+        state["processing_stage"] = "itemized"
+        return state
+
+    prompt = HOTEL_ITEMIZATION_PROMPT.format(
+        receipt_content=state.get("raw_text", ""),
+        check_in_date=check_in,
+        check_out_date=check_out,
+        total_amount=total,
+    )
+
+    messages = [
+        SystemMessage(content=HOTEL_SPECIALIST_SYSTEM),
+        HumanMessage(content=prompt),
+    ]
+
+    try:
+        response = llm.invoke(messages)
+        itemization = extract_json_from_response(response.content)
+
+        if itemization and isinstance(itemization, list):
+            state["hotel_itemization"] = itemization
+        else:
+            # Generate default itemization
+            state["hotel_itemization"] = generate_default_hotel_itemization(
+                check_in, check_out, float(total)
+            )
+
+    except Exception as e:
+        # Fallback to default itemization
+        state["hotel_itemization"] = generate_default_hotel_itemization(
+            check_in, check_out, float(total)
+        )
+
+    state["processing_stage"] = "itemized"
+    return state
+
+
+def generate_default_hotel_itemization(
+    check_in: str, check_out: str, total: float
+) -> list[dict]:
+    """Generate default per-night hotel itemization."""
+    from datetime import datetime, timedelta
+
+    check_in_date = datetime.strptime(check_in, "%Y-%m-%d").date()
+    check_out_date = datetime.strptime(check_out, "%Y-%m-%d").date()
+    nights = (check_out_date - check_in_date).days
+
+    if nights <= 0:
+        nights = 1
+
+    # Calculate per-night amounts
+    base_rate = total / nights / 1.15  # Assume 15% for taxes/fees
+    tax_rate = base_rate * 0.12
+    service = base_rate * 0.03
+
+    items = []
+    for i in range(nights):
+        night_date = check_in_date + timedelta(days=i)
+        items.append(
+            {
+                "night_date": night_date.isoformat(),
+                "room_rate": round(base_rate, 2),
+                "room_tax": round(tax_rate, 2),
+                "service_charge": round(service, 2),
+                "resort_fee": 0,
+                "parking_fee": 0,
+                "other_fees": 0,
+            }
+        )
+
+    return items
+
+
+def validate_expense(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
+    """Validate the extracted expense data."""
+    if state.get("error"):
+        return state
+
+    extracted = state.get("extracted_data", {})
+    errors = []
+    warnings = []
+
+    # Required field validation
+    if not extracted.get("vendor"):
+        errors.append("Vendor name is required")
+
+    if not extracted.get("total") or float(extracted.get("total", 0)) <= 0:
+        errors.append("Total amount must be greater than 0")
+
+    if not extracted.get("expense_date"):
+        warnings.append("Expense date not detected, using today's date")
+        extracted["expense_date"] = str(date.today())
+
+    # Category-specific validation
+    category = state.get("category", "other")
+
+    if category == "meal":
+        total = float(extracted.get("total", 0))
+        if total > settings.meal_companion_threshold:
+            warnings.append(
+                f"Meal exceeds ${settings.meal_companion_threshold} - companion information required"
+            )
+            extracted["requires_companion"] = True
+
+    if category == "hotel":
+        if not state.get("hotel_itemization"):
+            warnings.append("Hotel itemization required for per-night breakdown")
+            extracted["requires_itemization"] = True
+
+    state["validation_errors"] = errors
+    state["validation_warnings"] = warnings
+    state["extracted_data"] = extracted
+    state["processing_stage"] = "validated"
+
+    return state
+
+
+def build_expense_output(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
+    """Build the final ExtractedExpense output."""
+    if state.get("error"):
+        return state
+
+    extracted = state.get("extracted_data", {})
+    category = state.get("category", "other")
+
+    try:
+        # Parse dates
+        expense_date = extracted.get("expense_date", str(date.today()))
+        if isinstance(expense_date, str):
+            expense_date = datetime.strptime(expense_date, "%Y-%m-%d").date()
+
+        # Build hotel itemization if present
+        hotel_items = None
+        if state.get("hotel_itemization"):
+            hotel_items = []
+            for item in state["hotel_itemization"]:
+                night_date = item.get("night_date")
+                if isinstance(night_date, str):
+                    night_date = datetime.strptime(night_date, "%Y-%m-%d").date()
+
+                hotel_items.append(
+                    HotelNightItem(
+                        night_date=night_date,
+                        room_rate=Decimal(str(item.get("room_rate", 0))),
+                        room_tax=Decimal(str(item.get("room_tax", 0))),
+                        service_charge=Decimal(str(item.get("service_charge", 0))),
+                        resort_fee=Decimal(str(item.get("resort_fee", 0))),
+                        parking_fee=Decimal(str(item.get("parking_fee", 0))),
+                        other_fees=Decimal(str(item.get("other_fees", 0))),
+                    )
+                )
+
+        # Parse check-in/check-out dates for hotels
+        check_in = None
+        check_out = None
+        if category == "hotel":
+            if extracted.get("check_in_date"):
+                check_in = datetime.strptime(
+                    extracted["check_in_date"], "%Y-%m-%d"
+                ).date()
+            if extracted.get("check_out_date"):
+                check_out = datetime.strptime(
+                    extracted["check_out_date"], "%Y-%m-%d"
+                ).date()
+
+        expense = ExtractedExpense(
+            vendor=extracted.get("vendor", "Unknown"),
+            category=ExpenseCategory(category),
+            expense_date=expense_date,
+            description=extracted.get("description"),
+            subtotal=Decimal(str(extracted.get("subtotal", extracted.get("total", 0)))),
+            tax=Decimal(str(extracted.get("tax", 0))),
+            total=Decimal(str(extracted.get("total", 0))),
+            currency=extracted.get("currency", "USD"),
+            receipt_number=extracted.get("receipt_number"),
+            payment_method=extracted.get("payment_method"),
+            check_in_date=check_in,
+            check_out_date=check_out,
+            hotel_itemization=hotel_items,
+            confidence_score=state.get("confidence_score", 0.8),
+            requires_companion=extracted.get("requires_companion", False),
+            requires_itemization=extracted.get("requires_itemization", False),
+        )
+
+        state["expense"] = expense
+        state["processing_stage"] = "complete"
+
+    except Exception as e:
+        state["error"] = f"Failed to build expense output: {str(e)}"
+        state["processing_stage"] = "error"
+
+    return state
+
+
+def should_itemize_hotel(state: ExpenseWorkflowState) -> Literal["itemize", "skip"]:
+    """Determine if hotel itemization is needed."""
+    if state.get("category") == "hotel":
+        return "itemize"
+    return "skip"
+
+
+def create_expense_workflow() -> StateGraph:
+    """Create the expense processing workflow graph."""
+    workflow = StateGraph(ExpenseWorkflowState)
+
+    # Add nodes
+    workflow.add_node("parse_receipt", parse_receipt)
+    workflow.add_node("categorize", categorize_expense)
+    workflow.add_node("itemize_hotel", itemize_hotel)
+    workflow.add_node("validate", validate_expense)
+    workflow.add_node("build_output", build_expense_output)
+
+    # Define edges
+    workflow.set_entry_point("parse_receipt")
+    workflow.add_edge("parse_receipt", "categorize")
+    workflow.add_edge("categorize", "itemize_hotel")
+    workflow.add_edge("itemize_hotel", "validate")
+    workflow.add_edge("validate", "build_output")
+    workflow.add_edge("build_output", END)
+
+    return workflow.compile()
