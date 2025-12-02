@@ -9,16 +9,23 @@ import {
   Receipt,
   DollarSign,
   Calendar,
-  Filter
+  Filter,
+  FileText,
+  Settings,
+  Briefcase
 } from 'lucide-react';
 import { useExpense } from '../context/ExpenseContext';
 import { exportToExcel, exportToCSV, generateReportSummary } from '../services/exportService';
+import { exportToPDF } from '../services/pdfExportService';
 import ExpenseCard from './ExpenseCard';
 import { EXPENSE_CATEGORY_LABELS } from '../constants/expenseTypes';
 
 export default function Sidebar() {
   const {
     expenses,
+    claimInfo,
+    companyTemplate,
+    uploadedReceipts,
     removeExpense,
     setCurrentExpense,
     clearAllExpenses,
@@ -28,6 +35,7 @@ export default function Sidebar() {
   const [showExpenses, setShowExpenses] = useState(true);
   const [filterCategory, setFilterCategory] = useState('all');
   const [sortBy, setSortBy] = useState('date');
+  const [isExporting, setIsExporting] = useState(false);
 
   // Calculate summary
   const summary = generateReportSummary(expenses);
@@ -57,7 +65,7 @@ export default function Sidebar() {
       addBotMessage(`⚠️ **Warning:** Some expenses need attention before export:\n\n${issues}\n\nThe export will proceed, but please review these items.`);
     }
 
-    const filename = exportToExcel(expenses, 'expense_report');
+    const filename = exportToExcel(expenses, 'expense_report', claimInfo);
     addBotMessage(`✅ Expense report exported successfully!\n\nFile: **${filename}**\n\nThe spreadsheet includes:\n• Summary sheet with all ${expenses.length} expenses\n• Hotel itemization details (if applicable)\n• Meal companion information (if applicable)`);
   };
 
@@ -69,6 +77,29 @@ export default function Sidebar() {
 
     const filename = exportToCSV(expenses, 'expense_report');
     addBotMessage(`✅ CSV export complete!\n\nFile: **${filename}**`);
+  };
+
+  const handleExportPDF = async () => {
+    if (expenses.length === 0) {
+      addBotMessage('No expenses to export. Please add some receipts first!');
+      return;
+    }
+
+    if (!claimInfo.claimName && !claimInfo.businessPurpose) {
+      addBotMessage(`⚠️ **Tip:** Set up your expense claim details first for a more professional report.\n\nSay "setup claim info" to add:\n• Claim Name\n• Business Purpose\n• Traveler Name\n• Department\n\nProceeding with PDF export...`);
+    }
+
+    setIsExporting(true);
+
+    try {
+      const filename = await exportToPDF(expenses, claimInfo, uploadedReceipts, companyTemplate);
+      addBotMessage(`✅ PDF Report exported successfully!\n\nFile: **${filename}**\n\nThe report includes:\n• Cover page with claim details\n• Itemized expense summary\n• Category breakdown\n• ${uploadedReceipts.length} receipt(s) attached as appendix\n\n*Receipts are sorted by date order.*`);
+    } catch (error) {
+      console.error('PDF export error:', error);
+      addBotMessage(`❌ Failed to export PDF: ${error.message}\n\nPlease try again or use Excel/CSV export instead.`);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleClearAll = () => {
@@ -104,6 +135,30 @@ export default function Sidebar() {
           Expense Report
         </h2>
       </div>
+
+      {/* Claim Info Summary */}
+      {(claimInfo.claimName || claimInfo.businessPurpose) && (
+        <div className="claim-info-summary">
+          <div className="claim-info-header">
+            <Briefcase size={16} />
+            <span>{claimInfo.claimName || 'Expense Claim'}</span>
+          </div>
+          {claimInfo.businessPurpose && (
+            <p className="claim-purpose">{claimInfo.businessPurpose.substring(0, 80)}...</p>
+          )}
+          {claimInfo.travelerName && (
+            <span className="claim-traveler">{claimInfo.travelerName}</span>
+          )}
+        </div>
+      )}
+
+      {/* Template indicator */}
+      {companyTemplate && (
+        <div className="template-indicator">
+          <FileText size={14} />
+          <span>Using: {companyTemplate.name}</span>
+        </div>
+      )}
 
       {/* Summary Section */}
       <div className="summary-section">
@@ -150,11 +205,28 @@ export default function Sidebar() {
 
       {/* Export Actions */}
       <div className="export-section">
-        <button className="btn-export primary" onClick={handleExportExcel}>
+        <button
+          className="btn-export primary"
+          onClick={handleExportPDF}
+          disabled={isExporting}
+        >
+          {isExporting ? (
+            <>
+              <span className="spinner-small"></span>
+              Generating...
+            </>
+          ) : (
+            <>
+              <FileText size={18} />
+              Export PDF
+            </>
+          )}
+        </button>
+        <button className="btn-export secondary" onClick={handleExportExcel}>
           <FileSpreadsheet size={18} />
           Export to Excel
         </button>
-        <button className="btn-export secondary" onClick={handleExportCSV}>
+        <button className="btn-export tertiary" onClick={handleExportCSV}>
           <Download size={18} />
           Export CSV
         </button>

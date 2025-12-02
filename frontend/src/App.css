@@ -1321,3 +1321,388 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+/* ===================================
+   Claim Info Form
+   =================================== */
+.claim-info-container {
+  padding: 0 24px 24px;
+  animation: fadeIn 0.3s ease;
+}
+
+.claim-info-form {
+  background: var(--surface);
+  border-radius: var(--border-radius);
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+}
+
+.claim-info-form .form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.claim-info-form .form-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.claim-info-form .btn-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: var(--transition);
+}
+
+.claim-info-form .btn-close:hover {
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+}
+
+.claim-info-form .form-group {
+  margin-bottom: 16px;
+}
+
+.claim-info-form .form-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.claim-info-form .form-group label svg {
+  color: var(--text-secondary);
+}
+
+.claim-info-form .form-group input,
+.claim-info-form .form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.9375rem;
+  transition: var(--transition);
+  background: var(--surface);
+}
+
+.claim-info-form .form-group input:focus,
+.claim-info-form .form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.claim-info-form .form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.claim-info-form .help-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.claim-info-form .form-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.claim-info-form .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+}
+
+.claim-info-form .btn-secondary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.claim-info-form .btn-secondary:hover {
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+}
+
+.claim-info-form .btn-primary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--primary-color);
+  border: none;
+  border-radius: var(--border-radius-sm);
+  color: white;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.claim-info-form .btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+/* ===================================
+   Template Upload
+   =================================== */
+.template-upload-container {
+  padding: 0 24px 24px;
+  animation: fadeIn 0.3s ease;
+}
+
+.template-upload {
+  background: var(--surface);
+  border-radius: var(--border-radius);
+  padding: 24px;
+  box-shadow: var(--shadow-lg);
+}
+
+.template-upload-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.template-upload-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.template-upload .btn-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: var(--transition);
+}
+
+.template-upload .btn-close:hover {
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+}
+
+.template-info {
+  margin-bottom: 20px;
+}
+
+.template-info p {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.template-info ul {
+  list-style: none;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.template-info li {
+  padding: 4px 0;
+}
+
+.template-info li::before {
+  content: '•';
+  margin-right: 8px;
+  color: var(--primary-color);
+}
+
+.template-dropzone {
+  border: 2px dashed var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.template-dropzone:hover,
+.template-dropzone.active {
+  border-color: var(--primary-color);
+  background: var(--primary-light);
+}
+
+.template-dropzone.processing {
+  cursor: wait;
+  background: var(--surface-secondary);
+}
+
+.template-dropzone svg {
+  color: var(--text-muted);
+}
+
+.template-dropzone.active svg,
+.template-dropzone:hover svg {
+  color: var(--primary-color);
+}
+
+.template-dropzone p {
+  font-size: 1rem;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.template-dropzone span {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.template-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #fee2e2;
+  color: var(--error-color);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.875rem;
+  margin-top: 16px;
+}
+
+.template-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.template-actions .btn-secondary {
+  padding: 10px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.template-actions .btn-secondary:hover {
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+}
+
+/* ===================================
+   Sidebar Claim Info Summary
+   =================================== */
+.claim-info-summary {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, var(--primary-light) 0%, #dbeafe 100%);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.claim-info-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 8px;
+}
+
+.claim-purpose {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
+.claim-traveler {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Template Indicator */
+.template-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: var(--surface-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.template-indicator svg {
+  color: var(--success-color);
+}
+
+/* ===================================
+   Export Button Tertiary Style
+   =================================== */
+.btn-export.tertiary {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+}
+
+.btn-export.tertiary:hover {
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+}
+
+.btn-export:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Spinner for export button */
+.spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s linear infinite;
+}
+
+.spinner-large {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color);
+  border-radius: 50%;
+  border-top-color: var(--primary-color);
+  animation: spin 1s linear infinite;
+}

@@ -1,50 +1,57 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Bot, User, Loader2 } from 'lucide-react';
+import { Send, Paperclip, Bot, User, Loader2, Upload, FileText } from 'lucide-react';
 import { useExpense } from '../context/ExpenseContext';
 import FileUpload from './FileUpload';
 import ExpenseCard from './ExpenseCard';
 import ExpenseForm from './ExpenseForm';
+import ClaimInfoForm from './ClaimInfoForm';
+import TemplateUpload from './TemplateUpload';
 import { parseReceipt } from '../services/receiptParser';
 import { EXPENSE_CATEGORIES, MEAL_COMPANION_THRESHOLD } from '../constants/expenseTypes';
 
-const WELCOME_MESSAGE = {
-  role: 'assistant',
-  content: `Hello! I'm your Expense Claim Assistant. I can help you:
+const WELCOME_MESSAGE = `Hello! I'm your Expense Claim Assistant. I can help you:
 
 • **Upload receipts** - Just drag & drop or click to upload receipts and invoices
 • **Extract information** - I'll automatically parse vendor, amount, date, and category
 • **Itemize hotel stays** - I break down hotel bills by night with all fees
 • **Track meal companions** - For meals over $25, I'll help you record who you dined with
-• **Export to spreadsheet** - Generate your expense report in Excel format
+• **Import company template** - Upload your company's expense template for customized exports
+• **Export to PDF/Excel** - Generate professional expense reports with receipts attached
 
-How can I help you today? You can start by uploading a receipt or asking me a question!`
-};
+How can I help you today? Start by setting up your expense claim details or uploading a receipt!`;
 
 export default function ChatInterface() {
   const [inputValue, setInputValue] = useState('');
   const [showUpload, setShowUpload] = useState(false);
+  const [showClaimInfo, setShowClaimInfo] = useState(false);
+  const [showTemplateUpload, setShowTemplateUpload] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const welcomeAddedRef = useRef(false);
 
   const {
     messages,
     isProcessing,
     currentExpense,
+    claimInfo,
+    companyTemplate,
+    isInitialized,
     addBotMessage,
     addUserMessage,
     setProcessing,
     setCurrentExpense,
     addExpense,
-    clearCurrentExpense
+    clearCurrentExpense,
+    addUploadedReceipt
   } = useExpense();
 
-  // Initialize with welcome message on mount
+  // Initialize with welcome message on mount - only once
   useEffect(() => {
-    if (messages.length === 0) {
-      addBotMessage(WELCOME_MESSAGE.content);
+    if (isInitialized && messages.length === 0 && !welcomeAddedRef.current) {
+      welcomeAddedRef.current = true;
+      addBotMessage(WELCOME_MESSAGE);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isInitialized, messages.length, addBotMessage]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -70,20 +77,46 @@ export default function ChatInterface() {
 
     try {
       // Handle different user intents
-      if (lowerMessage.includes('upload') || lowerMessage.includes('receipt') || lowerMessage.includes('add')) {
+      if (lowerMessage.includes('template') || lowerMessage.includes('import template') || lowerMessage.includes('company template')) {
+        setShowTemplateUpload(true);
+        addBotMessage(`Sure! You can upload your company's expense template now. I accept Excel (.xlsx, .xls) and CSV files.
+
+Once uploaded, I'll analyze the template structure and use it to format your expense reports accordingly.`);
+      } else if (lowerMessage.includes('claim') && (lowerMessage.includes('info') || lowerMessage.includes('setup') || lowerMessage.includes('detail') || lowerMessage.includes('name'))) {
+        setShowClaimInfo(true);
+        addBotMessage(`Let's set up your expense claim details. Please fill in the following information:
+
+• **Claim Name** - A descriptive name for this expense report
+• **Business Purpose** - The reason for this business trip
+• **Traveler Name** - Your full name
+• **Department** - Your department or cost center`);
+      } else if (lowerMessage.includes('upload') || lowerMessage.includes('receipt') || lowerMessage.includes('add')) {
         setShowUpload(true);
         addBotMessage(`Sure! You can upload your receipt now. I accept images (JPG, PNG) and PDF files. Just drag and drop or click to select your file.`);
-      } else if (lowerMessage.includes('export') || lowerMessage.includes('download') || lowerMessage.includes('spreadsheet')) {
-        addBotMessage(`To export your expenses, click the "Export Report" button in the sidebar. I'll generate an Excel file with:
+      } else if (lowerMessage.includes('export') || lowerMessage.includes('download') || lowerMessage.includes('spreadsheet') || lowerMessage.includes('pdf')) {
+        addBotMessage(`To export your expenses:
 
-• **Summary sheet** - All expenses in one view
-• **Hotel itemization** - Per-night breakdown for hotel stays
-• **Meals & Entertainment** - Companion details for meals over $25`);
+**Excel/CSV Export:**
+Click the "Export to Excel" or "Export CSV" button in the sidebar.
+
+**PDF Export:**
+Click "Export PDF" for a professional report with:
+• Cover page with claim details
+• Itemized expense summary
+• All receipts attached as appendix (sorted by date)
+
+${companyTemplate ? `*Using your company template: ${companyTemplate.name}*` : '*Tip: Upload your company template for customized formatting.*'}`);
       } else if (lowerMessage.includes('help') || lowerMessage.includes('how')) {
         addBotMessage(`Here's how I can help:
 
+**Setup Your Claim:**
+Say "setup claim info" to enter your expense claim name and business purpose.
+
 **Upload Receipts:**
 Click the 📎 button or say "upload receipt" to add documents.
+
+**Import Company Template:**
+Say "import template" to upload your company's expense template.
 
 **Supported Expenses:**
 • Transportation: Taxi, rideshare, flights, car rental
@@ -91,10 +124,10 @@ Click the 📎 button or say "upload receipt" to add documents.
 • Meals: Restaurants (companion tracking for >$25)
 • Other: Parking, tolls, fuel, conference fees
 
-**Special Features:**
-• Hotel bills are automatically itemized by night
-• Meals over $25 require companion information
-• All data maps to your company's expense template`);
+**Export Options:**
+• Excel with multiple sheets
+• CSV for simple data
+• PDF with receipts attached`);
       } else if (lowerMessage.includes('hotel')) {
         addBotMessage(`For hotel receipts, I automatically:
 
@@ -124,12 +157,15 @@ This information is required for compliance and audit purposes. Upload your meal
         addBotMessage(`I understand you're asking about "${message}".
 
 I'm specialized in expense claim processing. Here's what I can do:
+• Set up expense claim with name and business purpose
 • Upload and parse receipts
+• Import your company's expense template
 • Categorize expenses automatically
 • Itemize hotel stays by night
 • Track meal companions for compliance
+• Export to PDF with receipts attached
 
-Would you like to upload a receipt or need help with something specific?`);
+Would you like to set up your claim info, upload a receipt, or import a template?`);
       }
     } catch {
       addBotMessage(`I apologize, but I encountered an error processing your request. Please try again or upload a receipt directly.`);
@@ -147,6 +183,16 @@ Would you like to upload a receipt or need help with something specific?`);
       addBotMessage(`Processing ${file.name}... I'm extracting expense information using AI-powered recognition.`);
 
       try {
+        // Store the receipt file as base64 for PDF export
+        const base64Data = await fileToBase64(file);
+        addUploadedReceipt({
+          id: Date.now().toString(),
+          fileName: file.name,
+          fileType: file.type,
+          base64: base64Data,
+          uploadedAt: new Date().toISOString()
+        });
+
         const parsedData = await parseReceipt(file);
 
         // Show what was extracted
@@ -192,7 +238,8 @@ Please review and edit the details below, then click "Save Expense" to add it to
           hotelItemization: parsedData.hotelItemization,
           requiresCompanion: parsedData.requiresCompanion,
           confidence: parsedData.confidence,
-          fileName: parsedData.fileName
+          fileName: parsedData.fileName,
+          receiptId: Date.now().toString() // Link to uploaded receipt
         });
 
       } catch {
@@ -210,13 +257,38 @@ Please review and edit the details below, then click "Save Expense" to add it to
 
 **${expense.vendor}** - $${expense.total.toFixed(2)}
 Category: ${expense.category}
+${claimInfo.claimName ? `\nAdded to: ${claimInfo.claimName}` : ''}
 
-The expense has been added to your report. Upload another receipt or type "export" when you're ready to generate your spreadsheet.`);
+The expense has been added to your report. Upload another receipt or type "export" when you're ready to generate your report.`);
   };
 
   const handleExpenseCancel = () => {
     clearCurrentExpense();
     addBotMessage(`No problem! The expense was not saved. Feel free to upload another receipt when you're ready.`);
+  };
+
+  const handleClaimInfoSave = () => {
+    setShowClaimInfo(false);
+    addBotMessage(`✅ Expense claim details saved!
+
+**Claim Name:** ${claimInfo.claimName || 'Not set'}
+**Business Purpose:** ${claimInfo.businessPurpose || 'Not set'}
+**Traveler:** ${claimInfo.travelerName || 'Not set'}
+**Department:** ${claimInfo.department || 'Not set'}
+
+Now you can start uploading your receipts. Just click the 📎 button or say "upload receipt".`);
+  };
+
+  const handleTemplateUpload = (template) => {
+    setShowTemplateUpload(false);
+    addBotMessage(`✅ Company template imported successfully!
+
+**Template:** ${template.name}
+**Columns detected:** ${template.columns.length}
+${template.columns.slice(0, 5).map(col => `• ${col}`).join('\n')}
+${template.columns.length > 5 ? `• ... and ${template.columns.length - 5} more` : ''}
+
+I'll use this template structure when exporting your expense report.`);
   };
 
   return (
@@ -238,6 +310,18 @@ The expense has been added to your report. Upload another receipt or type "expor
           </div>
         )}
 
+        {showClaimInfo && !currentExpense && (
+          <div className="claim-info-container">
+            <ClaimInfoForm onSave={handleClaimInfoSave} onCancel={() => setShowClaimInfo(false)} />
+          </div>
+        )}
+
+        {showTemplateUpload && !currentExpense && !showClaimInfo && (
+          <div className="template-upload-container">
+            <TemplateUpload onUpload={handleTemplateUpload} onCancel={() => setShowTemplateUpload(false)} />
+          </div>
+        )}
+
         {currentExpense && (
           <div className="expense-form-container">
             <ExpenseForm
@@ -248,7 +332,7 @@ The expense has been added to your report. Upload another receipt or type "expor
           </div>
         )}
 
-        {showUpload && !currentExpense && (
+        {showUpload && !currentExpense && !showClaimInfo && !showTemplateUpload && (
           <div className="upload-container">
             <FileUpload
               onUpload={handleFileUpload}
@@ -323,4 +407,14 @@ function formatMessageContent(content) {
     .replace(/\*(.*?)\*/g, '<em>$1</em>')
     .replace(/•/g, '<br/>•')
     .replace(/\n/g, '<br/>');
+}
+
+// Helper function to convert file to base64
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = (error) => reject(error);
+  });
 }
