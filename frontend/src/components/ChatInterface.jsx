@@ -463,6 +463,10 @@ async function parseTemplateFile(file) {
         let columns = [];
         let sheetData = [];
 
+        console.log('=== Parsing Template File ===');
+        console.log('File name:', file.name);
+        console.log('File type:', file.type);
+
         if (file.name.toLowerCase().endsWith('.csv')) {
           // Parse CSV
           const text = new TextDecoder().decode(data);
@@ -470,20 +474,31 @@ async function parseTemplateFile(file) {
           if (lines.length > 0) {
             columns = lines[0].split(',').map(col => col.trim().replace(/"/g, ''));
           }
+          console.log('CSV columns:', columns);
         } else {
           // Parse Excel file using xlsx library
+          console.log('Reading Excel file with xlsx library...');
           const workbook = XLSX.read(data, { type: 'array' });
+
+          console.log('Sheet names:', workbook.SheetNames);
 
           // Get the first sheet
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
 
+          console.log('First sheet name:', firstSheetName);
+
           // Convert to JSON to get data
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+          console.log('Total rows found:', jsonData.length);
+          console.log('First 3 rows:', jsonData.slice(0, 3));
 
           if (jsonData.length > 0) {
             // First row is typically headers
             columns = jsonData[0].map(col => String(col || '').trim());
+            console.log('Raw first row (headers):', jsonData[0]);
+            console.log('Processed columns:', columns);
 
             // Store additional rows as sample data
             if (jsonData.length > 1) {
@@ -494,6 +509,7 @@ async function parseTemplateFile(file) {
 
         // Filter out empty columns
         columns = columns.filter(col => col && col.length > 0);
+        console.log('Final columns (after filtering):', columns);
 
         if (columns.length === 0) {
           reject(new Error('Could not detect columns in the template. Make sure the first row contains column headers.'));
@@ -508,6 +524,7 @@ async function parseTemplateFile(file) {
           fileType: file.type || 'application/vnd.ms-excel'
         });
       } catch (err) {
+        console.error('Error parsing template:', err);
         reject(new Error('Failed to parse template: ' + err.message));
       }
     };
