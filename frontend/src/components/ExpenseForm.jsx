@@ -12,13 +12,13 @@ import {
 const getCurrencySymbol = (currencyCode) => {
   const symbols = {
     'MYR': 'RM ',
-    'SGD': 'S$',
+    'SGD': 'SGD ',
     'EUR': '€',
     'GBP': '£',
     'THB': '฿',
     'IDR': 'Rp ',
     'JPY': '¥',
-    'USD': '$'
+    'USD': 'USD '
   };
   return symbols[currencyCode] || currencyCode + ' ';
 };

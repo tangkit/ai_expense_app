@@ -244,13 +244,13 @@ Please make sure it's a valid Excel (.xls, .xlsx) or CSV file.`);
         const getCurrencySymbol = (currencyCode) => {
           const symbols = {
             'MYR': 'RM ',
-            'SGD': 'S$',
+            'SGD': 'SGD ',
             'EUR': '€',
             'GBP': '£',
             'THB': '฿',
             'IDR': 'Rp ',
             'JPY': '¥',
-            'USD': '$'
+            'USD': 'USD '
           };
           return symbols[currencyCode] || currencyCode + ' ';
         };
@@ -392,13 +392,13 @@ Please review and edit the details below, then click "Save Expense" to add it to
     // Get currency symbol for display
     const symbols = {
       'MYR': 'RM ',
-      'SGD': 'S$',
+      'SGD': 'SGD ',
       'EUR': '€',
       'GBP': '£',
       'THB': '฿',
       'IDR': 'Rp ',
       'JPY': '¥',
-      'USD': '$'
+      'USD': 'USD '
     };
     const currSymbol = symbols[expense.currency] || expense.currency + ' ';
 
@@ -418,13 +418,13 @@ The expense has been added to your report. Upload another receipt or type "expor
 
     const symbols = {
       'MYR': 'RM ',
-      'SGD': 'S$',
+      'SGD': 'SGD ',
       'EUR': '€',
       'GBP': '£',
       'THB': '฿',
       'IDR': 'Rp ',
       'JPY': '¥',
-      'USD': '$'
+      'USD': 'USD '
     };
     const currSymbol = symbols[expense.currency] || expense.currency + ' ';
     const remainingCount = pendingExpenses.length - 1;
