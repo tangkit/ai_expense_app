@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, FileSpreadsheet, X, Check, AlertCircle } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useExpense } from '../context/ExpenseContext';
 
 export default function TemplateUpload({ onUpload, onCancel }) {
@@ -31,7 +32,14 @@ export default function TemplateUpload({ onUpload, onCancel }) {
     accept: {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'application/vnd.ms-excel': ['.xls'],
-      'text/csv': ['.csv']
+      'application/msexcel': ['.xls'],
+      'application/x-msexcel': ['.xls'],
+      'application/x-ms-excel': ['.xls'],
+      'application/x-excel': ['.xls'],
+      'application/xls': ['.xls'],
+      'application/excel': ['.xls'],
+      'text/csv': ['.csv'],
+      'application/csv': ['.csv']
     },
     maxFiles: 1,
     disabled: isProcessing
@@ -98,88 +106,86 @@ export default function TemplateUpload({ onUpload, onCancel }) {
   );
 }
 
-// Parse template file to extract structure
+// Parse template file to extract structure using xlsx library
 async function parseTemplateFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
     reader.onload = (event) => {
       try {
-        const content = event.target.result;
+        const data = event.target.result;
         let columns = [];
+        let sheetData = [];
 
-        if (file.name.endsWith('.csv')) {
+        console.log('=== TemplateUpload: Parsing Template File ===');
+        console.log('File name:', file.name);
+        console.log('File type:', file.type);
+
+        if (file.name.toLowerCase().endsWith('.csv')) {
           // Parse CSV
-          const lines = content.split('\n');
+          const text = new TextDecoder().decode(data);
+          const lines = text.split('\n');
           if (lines.length > 0) {
             columns = lines[0].split(',').map(col => col.trim().replace(/"/g, ''));
           }
+          console.log('CSV columns:', columns);
         } else {
-          // For Excel files, we'll use a simplified approach
-          // In production, you'd want to use a library like xlsx
-          // For now, we'll detect common expense template columns
-          columns = detectCommonExpenseColumns(file.name);
+          // Parse Excel file using xlsx library
+          console.log('Reading Excel file with xlsx library...');
+          const workbook = XLSX.read(data, { type: 'array' });
+
+          console.log('Sheet names:', workbook.SheetNames);
+
+          // Get the first sheet
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+
+          console.log('First sheet name:', firstSheetName);
+
+          // Convert to JSON to get data
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+          console.log('Total rows found:', jsonData.length);
+          console.log('First 3 rows:', jsonData.slice(0, 3));
+
+          if (jsonData.length > 0) {
+            // First row is typically headers
+            columns = jsonData[0].map(col => String(col || '').trim());
+            console.log('Raw first row (headers):', jsonData[0]);
+            console.log('Processed columns:', columns);
+
+            // Store additional rows as sample data
+            if (jsonData.length > 1) {
+              sheetData = jsonData.slice(1, 6); // Get first 5 data rows as sample
+            }
+          }
         }
 
         // Filter out empty columns
         columns = columns.filter(col => col && col.length > 0);
+        console.log('Final columns (after filtering):', columns);
 
         if (columns.length === 0) {
-          reject(new Error('Could not detect columns in the template'));
+          reject(new Error('Could not detect columns in the template. Make sure the first row contains column headers.'));
           return;
         }
 
         resolve({
           name: file.name,
           columns: columns,
+          sampleData: sheetData,
           uploadedAt: new Date().toISOString(),
-          fileType: file.type || 'application/octet-stream'
+          fileType: file.type || 'application/vnd.ms-excel'
         });
       } catch (err) {
+        console.error('Error parsing template:', err);
         reject(new Error('Failed to parse template: ' + err.message));
       }
     };
 
     reader.onerror = () => reject(new Error('Failed to read file'));
 
-    if (file.name.endsWith('.csv')) {
-      reader.readAsText(file);
-    } else {
-      // For Excel files, detect common columns based on filename patterns
-      // In production, use xlsx library
-      reader.readAsArrayBuffer(file);
-
-      // Since we can't parse Excel without a library, use common patterns
-      setTimeout(() => {
-        const columns = detectCommonExpenseColumns(file.name);
-        resolve({
-          name: file.name,
-          columns: columns,
-          uploadedAt: new Date().toISOString(),
-          fileType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        });
-      }, 500);
-    }
+    // Read as ArrayBuffer for xlsx library
+    reader.readAsArrayBuffer(file);
   });
-}
-
-// Detect common expense report columns
-function detectCommonExpenseColumns(filename) {
-  // Common expense report columns
-  return [
-    'Date',
-    'Vendor/Merchant',
-    'Description',
-    'Category',
-    'Amount',
-    'Tax',
-    'Total',
-    'Currency',
-    'Payment Method',
-    'Receipt Attached',
-    'Business Purpose',
-    'Project/Cost Center',
-    'Companion Name',
-    'Notes'
-  ];
 }
