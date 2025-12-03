@@ -121,18 +121,30 @@ const ACTIONS = {
 function expenseReducer(state, action) {
   switch (action.type) {
     case ACTIONS.ADD_EXPENSE:
+      // Add expense and sort by date (earliest first)
+      const newExpenses = [...state.expenses, action.payload].sort((a, b) => {
+        const dateA = new Date(a.date || '1900-01-01');
+        const dateB = new Date(b.date || '1900-01-01');
+        return dateA - dateB;
+      });
       return {
         ...state,
-        expenses: [...state.expenses, action.payload],
+        expenses: newExpenses,
         currentExpense: null
       };
 
     case ACTIONS.UPDATE_EXPENSE:
+      // Update expense and re-sort by date (in case date changed)
+      const updatedExpenses = state.expenses.map(exp =>
+        exp.id === action.payload.id ? { ...exp, ...action.payload } : exp
+      ).sort((a, b) => {
+        const dateA = new Date(a.date || '1900-01-01');
+        const dateB = new Date(b.date || '1900-01-01');
+        return dateA - dateB;
+      });
       return {
         ...state,
-        expenses: state.expenses.map(exp =>
-          exp.id === action.payload.id ? { ...exp, ...action.payload } : exp
-        )
+        expenses: updatedExpenses
       };
 
     case ACTIONS.REMOVE_EXPENSE:
@@ -275,18 +287,33 @@ export function ExpenseProvider({ children }) {
   useEffect(() => {
     if (!state.isInitialized) return;
 
+    // Note: uploadedReceipts are NOT persisted to localStorage because base64 images
+    // can easily exceed localStorage quota limits (5-10MB). Receipts are kept in memory
+    // for the current session only. Users should export before closing the page.
     const dataToSave = {
       expenses: state.expenses,
       messages: state.messages,
       claimInfo: state.claimInfo,
-      companyTemplate: state.companyTemplate,
-      uploadedReceipts: state.uploadedReceipts
+      companyTemplate: state.companyTemplate
+      // uploadedReceipts intentionally excluded - too large for localStorage
     };
 
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
     } catch (error) {
       console.error('Failed to persist state:', error);
+      // If still failing, try saving without companyTemplate (which also has large fileContent)
+      try {
+        const minimalSave = {
+          expenses: state.expenses,
+          messages: state.messages,
+          claimInfo: state.claimInfo
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(minimalSave));
+        console.warn('Saved minimal state due to quota - template not persisted');
+      } catch (innerError) {
+        console.error('Failed even minimal persist:', innerError);
+      }
     }
   }, [state.expenses, state.messages, state.claimInfo, state.companyTemplate, state.uploadedReceipts, state.isInitialized]);
 

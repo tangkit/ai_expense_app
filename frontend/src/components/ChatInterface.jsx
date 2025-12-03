@@ -230,13 +230,21 @@ Please make sure it's a valid Excel (.xls, .xlsx) or CSV file.`);
       try {
         // Store the receipt file as base64 for PDF export
         const base64Data = await fileToBase64(file);
-        addUploadedReceipt({
+        console.log('=== Receipt Base64 Data ===');
+        console.log('File name:', file.name);
+        console.log('File type:', file.type);
+        console.log('Base64 length:', base64Data?.length || 0);
+        console.log('Base64 starts with:', base64Data?.substring(0, 50));
+
+        const receiptRecord = {
           id: Date.now().toString(),
           fileName: file.name,
           fileType: file.type,
           base64: base64Data,
           uploadedAt: new Date().toISOString()
-        });
+        };
+        console.log('Adding receipt record:', { ...receiptRecord, base64: `[${base64Data?.length || 0} chars]` });
+        addUploadedReceipt(receiptRecord);
 
         const parsedExpenses = await parseReceipt(file);
 

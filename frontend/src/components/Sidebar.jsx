@@ -66,6 +66,19 @@ export default function Sidebar() {
     }
 
     try {
+      // Debug: Log receipts state before export
+      console.log('=== Export Starting ===');
+      console.log('uploadedReceipts count:', uploadedReceipts?.length || 0);
+      uploadedReceipts?.forEach((r, idx) => {
+        console.log(`Receipt ${idx + 1}:`, {
+          id: r.id,
+          fileName: r.fileName,
+          fileType: r.fileType,
+          hasBase64: !!r.base64,
+          base64Length: r.base64?.length || 0
+        });
+      });
+
       // Pass uploadedReceipts to bundle Excel with receipts PDF in a zip
       const filename = await exportToExcel(expenses, 'expense_report', claimInfo, companyTemplate, uploadedReceipts);
 
