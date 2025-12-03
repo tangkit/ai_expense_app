@@ -872,16 +872,18 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
 
   console.log('Available data rows:', maxDataRows);
 
-  // Sort expenses chronologically (earliest first)
-  const sortedExpenses = [...expenses].sort((a, b) => {
+  // Expand hotel expenses into nightly rows first
+  const expandedExpenses = expandExpensesForExport(expenses);
+  console.log('Expenses after expansion:', expandedExpenses.length);
+
+  // Sort ALL expanded expenses chronologically by date (earliest first)
+  // This ensures hotel nights are interleaved with other expenses by date
+  expandedExpenses.sort((a, b) => {
     const dateA = new Date(a.date || '1900-01-01');
     const dateB = new Date(b.date || '1900-01-01');
     return dateA - dateB;
   });
-
-  // Expand hotel expenses into nightly rows
-  const expandedExpenses = expandExpensesForExport(sortedExpenses);
-  console.log('Expenses after expansion:', expandedExpenses.length);
+  console.log('Expenses sorted by date');
 
   // Get column mapping from template columns to actual Excel columns
   const columnIndices = [];
