@@ -624,6 +624,12 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
     const exchangeRate = exchangeRates[localCurrency] || 1;
     const isSGD = localCurrency === 'SGD';
 
+    // Log for first row to debug column mapping
+    if (expenseIndex === 0) {
+      console.log('Template columns:', companyTemplate.columns);
+      console.log('First expense currency:', localCurrency, 'isSGD:', isSGD, 'exchangeRate:', exchangeRate);
+    }
+
     companyTemplate.columns.forEach((colName, idx) => {
       const colIndex = columnIndices[idx];
       const cell = worksheet.getCell(rowIndex, colIndex);
@@ -637,13 +643,23 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
         const localAmount = expense.amount || expense.total || 0;
         value = formatCurrencyValue(localAmount, localCurrency);
       }
-      // Special handling for Conversion Rate - show exchange rate if different currencies
-      else if (normalizedColName.includes('conversion') && normalizedColName.includes('rate')) {
+      // Special handling for Conversion Rate / Exchange Rate column
+      // Matches: "Conversion Rate", "Conv Rate", "Exchange Rate", "Rate", "Conv. Rate", "FX Rate"
+      else if (
+        (normalizedColName.includes('conversion') && normalizedColName.includes('rate')) ||
+        (normalizedColName.includes('exchange') && normalizedColName.includes('rate')) ||
+        (normalizedColName.includes('conv') && normalizedColName.includes('rate')) ||
+        (normalizedColName.includes('fx') && normalizedColName.includes('rate')) ||
+        (normalizedColName === 'rate')
+      ) {
         // Only show rate if local currency is different from SGD
         if (isSGD) {
           value = ''; // No conversion needed for SGD
         } else {
-          value = exchangeRate.toFixed(4); // Show 4 decimal places for rate
+          value = roundTo2Decimals(exchangeRate).toFixed(2); // Show 2 decimal places for rate
+        }
+        if (expenseIndex === 0) {
+          console.log(`Conversion Rate column "${colName}" detected, value:`, value);
         }
       }
       // Special handling for Amount (Reimbursed) - show S$ converted amount
