@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # CORS
-    cors_origins: str = "http://localhost:5173,http://localhost:3000"
+    cors_origins: str = "http://localhost:5173,http://localhost:5080,http://localhost:3000"
 
     # File uploads
     max_file_size_mb: int = 10
