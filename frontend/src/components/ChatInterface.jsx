@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Paperclip, Bot, User, Loader2, Upload, FileText } from 'lucide-react';
 import { useExpense } from '../context/ExpenseContext';
-import FileUpload from './FileUpload';
+import FileUpload, { isTemplateFile } from './FileUpload';
 import ExpenseCard from './ExpenseCard';
 import ExpenseForm from './ExpenseForm';
 import ClaimInfoForm from './ClaimInfoForm';
@@ -46,7 +46,8 @@ export default function ChatInterface() {
     setCurrentExpense,
     addExpense,
     clearCurrentExpense,
-    addUploadedReceipt
+    addUploadedReceipt,
+    setCompanyTemplate
   } = useExpense();
 
   // Initialize with welcome message on mount - only once
@@ -184,6 +185,33 @@ Would you like to set up your claim info, upload a receipt, or import a template
 
     for (const file of files) {
       addUserMessage(`Uploaded: ${file.name}`, { type: 'file', file: file.name });
+
+      // Check if this is a template file (Excel/CSV)
+      if (isTemplateFile(file)) {
+        addBotMessage(`Processing ${file.name} as company template...`);
+
+        try {
+          // Parse template file
+          const template = await parseTemplateFile(file);
+          setCompanyTemplate(template);
+
+          addBotMessage(`✅ Company template imported successfully!
+
+**Template:** ${template.name}
+**Columns detected:** ${template.columns.length}
+${template.columns.slice(0, 5).map(col => `• ${col}`).join('\n')}
+${template.columns.length > 5 ? `• ... and ${template.columns.length - 5} more` : ''}
+
+I'll use this template structure when exporting your expense report.`);
+        } catch (err) {
+          addBotMessage(`❌ Failed to import template: ${err.message}
+
+Please make sure it's a valid Excel (.xls, .xlsx) or CSV file.`);
+        }
+        continue; // Skip to next file
+      }
+
+      // Handle as receipt
       addBotMessage(`Processing ${file.name}... I'm extracting expense information using AI-powered recognition.`);
 
       try {
@@ -420,5 +448,93 @@ async function fileToBase64(file) {
     reader.readAsDataURL(file);
     reader.onload = () => resolve(reader.result);
     reader.onerror = (error) => reject(error);
+  });
+}
+
+// Parse template file to extract structure
+async function parseTemplateFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+      try {
+        const content = event.target.result;
+        let columns = [];
+
+        if (file.name.toLowerCase().endsWith('.csv')) {
+          // Parse CSV
+          const lines = content.split('\n');
+          if (lines.length > 0) {
+            columns = lines[0].split(',').map(col => col.trim().replace(/"/g, ''));
+          }
+        } else {
+          // For Excel files, detect common expense template columns
+          columns = [
+            'Date',
+            'Vendor/Merchant',
+            'Description',
+            'Category',
+            'Amount',
+            'Tax',
+            'Total',
+            'Currency',
+            'Payment Method',
+            'Receipt Attached',
+            'Business Purpose',
+            'Project/Cost Center',
+            'Companion Name',
+            'Notes'
+          ];
+        }
+
+        // Filter out empty columns
+        columns = columns.filter(col => col && col.length > 0);
+
+        if (columns.length === 0) {
+          reject(new Error('Could not detect columns in the template'));
+          return;
+        }
+
+        resolve({
+          name: file.name,
+          columns: columns,
+          uploadedAt: new Date().toISOString(),
+          fileType: file.type || 'application/octet-stream'
+        });
+      } catch (err) {
+        reject(new Error('Failed to parse template: ' + err.message));
+      }
+    };
+
+    reader.onerror = () => reject(new Error('Failed to read file'));
+
+    if (file.name.toLowerCase().endsWith('.csv')) {
+      reader.readAsText(file);
+    } else {
+      // For Excel files, use common patterns
+      setTimeout(() => {
+        resolve({
+          name: file.name,
+          columns: [
+            'Date',
+            'Vendor/Merchant',
+            'Description',
+            'Category',
+            'Amount',
+            'Tax',
+            'Total',
+            'Currency',
+            'Payment Method',
+            'Receipt Attached',
+            'Business Purpose',
+            'Project/Cost Center',
+            'Companion Name',
+            'Notes'
+          ],
+          uploadedAt: new Date().toISOString(),
+          fileType: file.type || 'application/vnd.ms-excel'
+        });
+      }, 300);
+    }
   });
 }

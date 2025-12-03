@@ -1,6 +1,6 @@
 import React, { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
-import { Upload, X, FileImage, FileText, File } from 'lucide-react';
+import { Upload, X, FileImage, FileText, File, FileSpreadsheet } from 'lucide-react';
 
 const ACCEPTED_FILE_TYPES = {
   'image/jpeg': ['.jpg', '.jpeg'],
@@ -9,10 +9,21 @@ const ACCEPTED_FILE_TYPES = {
   'image/webp': ['.webp'],
   'application/pdf': ['.pdf'],
   'image/heic': ['.heic'],
-  'image/heif': ['.heif']
+  'image/heif': ['.heif'],
+  // Excel and CSV for templates
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  'application/vnd.ms-excel': ['.xls'],
+  'text/csv': ['.csv'],
+  'application/csv': ['.csv']
 };
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+// Helper to check if file is a spreadsheet/template
+export function isTemplateFile(file) {
+  const ext = file.name.toLowerCase();
+  return ext.endsWith('.xlsx') || ext.endsWith('.xls') || ext.endsWith('.csv');
+}
 
 export default function FileUpload({ onUpload, onCancel }) {
   const onDrop = useCallback((acceptedFiles, rejectedFiles) => {
@@ -51,7 +62,7 @@ export default function FileUpload({ onUpload, onCancel }) {
   return (
     <div className="file-upload">
       <div className="file-upload-header">
-        <h3>Upload Receipt</h3>
+        <h3>Upload Receipt or Template</h3>
         <button className="close-button" onClick={onCancel} title="Cancel">
           <X size={20} />
         </button>
@@ -72,10 +83,10 @@ export default function FileUpload({ onUpload, onCancel }) {
           ) : (
             <>
               <p className="dropzone-text">
-                Drag & drop receipts here, or click to select
+                Drag & drop files here, or click to select
               </p>
               <p className="dropzone-subtext">
-                Supports JPG, PNG, PDF • Max 10MB
+                Receipts: JPG, PNG, PDF • Templates: XLS, XLSX, CSV
               </p>
             </>
           )}
@@ -83,7 +94,7 @@ export default function FileUpload({ onUpload, onCancel }) {
       </div>
 
       <div className="supported-formats">
-        <h4>Supported Receipt Types:</h4>
+        <h4>Supported File Types:</h4>
         <div className="format-list">
           <div className="format-item">
             <FileImage size={16} />
@@ -94,18 +105,18 @@ export default function FileUpload({ onUpload, onCancel }) {
             <span>PDF Documents</span>
           </div>
           <div className="format-item">
-            <File size={16} />
-            <span>Scanned Receipts</span>
+            <FileSpreadsheet size={16} />
+            <span>Excel/CSV Templates</span>
           </div>
         </div>
       </div>
 
       <div className="upload-tips">
-        <h4>Tips for best results:</h4>
+        <h4>Tips:</h4>
         <ul>
-          <li>Ensure the receipt is clearly visible and well-lit</li>
-          <li>Include the entire receipt in the frame</li>
-          <li>Avoid blurry or cropped images</li>
+          <li>Drop receipts (images/PDFs) to extract expense data</li>
+          <li>Drop Excel/CSV to import your company template</li>
+          <li>Ensure receipts are clearly visible and well-lit</li>
           <li>For hotel receipts, upload the final folio</li>
         </ul>
       </div>
