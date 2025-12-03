@@ -236,22 +236,37 @@ Please make sure it's a valid Excel (.xls, .xlsx) or CSV file.`);
 • Category: ${parsedData.extracted.category}
 • Date: ${parsedData.extracted.date}`;
 
+        // Get currency symbol helper
+        const getCurrencySymbol = (currencyCode) => {
+          const symbols = {
+            'MYR': 'RM ',
+            'SGD': 'S$',
+            'EUR': '€',
+            'GBP': '£',
+            'THB': '฿',
+            'IDR': 'Rp ',
+            'JPY': '¥',
+            'USD': '$'
+          };
+          return symbols[currencyCode] || currencyCode + ' ';
+        };
+
         // Show currency conversion info if applicable
         if (parsedData.currencyConversion) {
           const conv = parsedData.currencyConversion;
+          const origSymbol = getCurrencySymbol(conv.originalCurrency);
+          const convSymbol = getCurrencySymbol(conv.convertedCurrency);
           extractionMessage += `
-• Original Amount: ${conv.originalCurrency} ${conv.originalAmount.toFixed(2)}
+• **Original Amount: ${origSymbol}${conv.originalAmount.toFixed(2)} ${conv.originalCurrency}**
 • Exchange Rate: 1 ${conv.originalCurrency} = ${conv.exchangeRate.toFixed(4)} ${conv.convertedCurrency} (${conv.exchangeRateSource})
-• **Converted Total: $${conv.convertedAmount.toFixed(2)} ${conv.convertedCurrency}**`;
+• **Converted for Reimbursement: ${convSymbol}${conv.convertedAmount.toFixed(2)} ${conv.convertedCurrency}**`;
         } else {
-          const currencySymbol = parsedData.extracted.currency === 'MYR' ? 'RM ' :
-                                 parsedData.extracted.currency === 'SGD' ? 'S$' :
-                                 parsedData.extracted.currency === 'EUR' ? '€' :
-                                 parsedData.extracted.currency === 'GBP' ? '£' : '$';
+          const currency = parsedData.extracted.currency || 'USD';
+          const currencySymbol = getCurrencySymbol(currency);
           extractionMessage += `
-• Amount: ${currencySymbol}${parsedData.extracted.amount.toFixed(2)} ${parsedData.extracted.currency || 'USD'}
+• Amount: ${currencySymbol}${parsedData.extracted.amount.toFixed(2)} ${currency}
 • Tax: ${currencySymbol}${parsedData.extracted.tax.toFixed(2)}
-• **Total: ${currencySymbol}${parsedData.extracted.total.toFixed(2)} ${parsedData.extracted.currency || 'USD'}**`;
+• **Total: ${currencySymbol}${parsedData.extracted.total.toFixed(2)} ${currency}**`;
         }
 
         // Show flight info
@@ -316,9 +331,21 @@ Please review and edit the details below, then click "Save Expense" to add it to
   const handleExpenseSave = (expense) => {
     addExpense(expense);
     clearCurrentExpense();
+    // Get currency symbol for display
+    const symbols = {
+      'MYR': 'RM ',
+      'SGD': 'S$',
+      'EUR': '€',
+      'GBP': '£',
+      'THB': '฿',
+      'IDR': 'Rp ',
+      'JPY': '¥',
+      'USD': '$'
+    };
+    const currSymbol = symbols[expense.currency] || expense.currency + ' ';
     addBotMessage(`✅ Expense saved successfully!
 
-**${expense.vendor}** - $${expense.total.toFixed(2)}
+**${expense.vendor}** - ${currSymbol}${expense.total.toFixed(2)} ${expense.currency}
 Category: ${expense.category}
 ${claimInfo.claimName ? `\nAdded to: ${claimInfo.claimName}` : ''}
 

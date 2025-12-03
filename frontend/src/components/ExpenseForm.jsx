@@ -8,6 +8,21 @@ import {
   MEAL_COMPANION_THRESHOLD
 } from '../constants/expenseTypes';
 
+// Currency symbol helper
+const getCurrencySymbol = (currencyCode) => {
+  const symbols = {
+    'MYR': 'RM',
+    'SGD': 'S$',
+    'EUR': '€',
+    'GBP': '£',
+    'THB': '฿',
+    'IDR': 'Rp',
+    'JPY': '¥',
+    'USD': '$'
+  };
+  return symbols[currencyCode] || currencyCode;
+};
+
 export default function ExpenseForm({ expense, onSave, onCancel }) {
   const [formData, setFormData] = useState({
     vendor: '',
@@ -16,7 +31,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
     amount: 0,
     tax: 0,
     total: 0,
-    currency: 'USD',
+    currency: 'SGD',  // Default to SGD (Singapore Dollar)
     receiptNumber: '',
     paymentMethod: '',
     description: '',
@@ -303,13 +318,13 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
       {/* Amount Section */}
       {!isHotel && (
         <div className="form-section">
-          <h4>Amount</h4>
+          <h4>Amount ({formData.currency})</h4>
 
           <div className="form-row amount-row">
             <div className="form-group">
               <label htmlFor="amount">Subtotal</label>
               <div className="currency-input">
-                <span className="currency-symbol">$</span>
+                <span className="currency-symbol">{getCurrencySymbol(formData.currency)}</span>
                 <input
                   type="number"
                   id="amount"
@@ -324,7 +339,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
             <div className="form-group">
               <label htmlFor="tax">Tax</label>
               <div className="currency-input">
-                <span className="currency-symbol">$</span>
+                <span className="currency-symbol">{getCurrencySymbol(formData.currency)}</span>
                 <input
                   type="number"
                   id="tax"
@@ -339,7 +354,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
             <div className="form-group">
               <label htmlFor="total">Total *</label>
               <div className="currency-input total">
-                <span className="currency-symbol">$</span>
+                <span className="currency-symbol">{getCurrencySymbol(formData.currency)}</span>
                 <input
                   type="number"
                   id="total"
@@ -426,7 +441,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                       <div className="form-group compact">
                         <label>Room Rate</label>
                         <div className="currency-input small">
-                          <span>$</span>
+                          <span>{getCurrencySymbol(formData.currency)}</span>
                           <input
                             type="number"
                             value={night.roomRate}
@@ -439,7 +454,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                       <div className="form-group compact">
                         <label>Room Tax</label>
                         <div className="currency-input small">
-                          <span>$</span>
+                          <span>{getCurrencySymbol(formData.currency)}</span>
                           <input
                             type="number"
                             value={night.roomTax}
@@ -452,7 +467,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                       <div className="form-group compact">
                         <label>Service Charge</label>
                         <div className="currency-input small">
-                          <span>$</span>
+                          <span>{getCurrencySymbol(formData.currency)}</span>
                           <input
                             type="number"
                             value={night.serviceCharge}
@@ -465,7 +480,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                       <div className="form-group compact">
                         <label>Resort Fee</label>
                         <div className="currency-input small">
-                          <span>$</span>
+                          <span>{getCurrencySymbol(formData.currency)}</span>
                           <input
                             type="number"
                             value={night.resortFee}
@@ -478,7 +493,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                       <div className="form-group compact">
                         <label>Parking</label>
                         <div className="currency-input small">
-                          <span>$</span>
+                          <span>{getCurrencySymbol(formData.currency)}</span>
                           <input
                             type="number"
                             value={night.parkingFee}
@@ -491,7 +506,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                       <div className="form-group compact">
                         <label>Other Fees</label>
                         <div className="currency-input small">
-                          <span>$</span>
+                          <span>{getCurrencySymbol(formData.currency)}</span>
                           <input
                             type="number"
                             value={night.otherFees}
@@ -504,7 +519,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
                       <div className="form-group compact daily-total">
                         <label>Daily Total</label>
                         <div className="currency-input small total">
-                          <span>$</span>
+                          <span>{getCurrencySymbol(formData.currency)}</span>
                           <input
                             type="number"
                             value={night.dailyTotal}
@@ -529,7 +544,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
 
               <div className="hotel-grand-total">
                 <span>Grand Total:</span>
-                <strong>${formData.total.toFixed(2)}</strong>
+                <strong>{getCurrencySymbol(formData.currency)}{formData.total.toFixed(2)}</strong>
               </div>
             </>
           )}

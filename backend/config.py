@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     meal_companion_threshold: float = 25.0
 
     # Currency settings
-    reimbursement_currency: str = "USD"
+    reimbursement_currency: str = "SGD"  # Singapore Dollar
     alphavantage_api_key: str = ""  # AlphaVantage API key for forex rates
 
     @property

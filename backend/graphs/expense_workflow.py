@@ -388,6 +388,45 @@ def validate_expense(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     return state
 
 
+def normalize_currency_code(currency: str) -> str:
+    """Normalize various currency representations to standard ISO codes."""
+    if not currency:
+        return "USD"
+
+    currency_upper = currency.upper().strip()
+
+    # Map common representations to ISO codes
+    currency_map = {
+        "RM": "MYR",
+        "RINGGIT": "MYR",
+        "MALAYSIAN RINGGIT": "MYR",
+        "S$": "SGD",
+        "SINGAPORE DOLLAR": "SGD",
+        "BAHT": "THB",
+        "THAI BAHT": "THB",
+        "฿": "THB",
+        "RUPIAH": "IDR",
+        "INDONESIAN RUPIAH": "IDR",
+        "IDR": "IDR",
+        "RP": "IDR",
+        "€": "EUR",
+        "EURO": "EUR",
+        "£": "GBP",
+        "POUND": "GBP",
+        "¥": "JPY",
+        "YEN": "JPY",
+        "$": "USD",  # Default $ to USD, but this could be ambiguous
+    }
+
+    # Check if it's already a valid ISO code
+    valid_codes = ["USD", "MYR", "SGD", "THB", "IDR", "EUR", "GBP", "JPY", "AUD", "CAD", "HKD", "PHP", "VND", "INR", "CNY"]
+    if currency_upper in valid_codes:
+        return currency_upper
+
+    # Try to map from common representations
+    return currency_map.get(currency_upper, currency_upper)
+
+
 def infer_currency_from_airline(airline: str, departure_city: str = None) -> str | None:
     """Infer currency based on airline name or departure city."""
     if not airline:
@@ -429,14 +468,17 @@ def convert_currency(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
         return state
 
     extracted = state.get("extracted_data", {})
-    currency = extracted.get("currency", "USD").upper()
+    raw_currency = extracted.get("currency", "USD")
+    # Normalize the currency code (handles RM -> MYR, Ringgit -> MYR, etc.)
+    currency = normalize_currency_code(raw_currency)
     total = Decimal(str(extracted.get("total", 0)))
     reimbursement_currency = settings.reimbursement_currency.upper()
 
-    logger.info(f"Currency conversion: detected currency={currency}, airline={extracted.get('airline')}, departure={extracted.get('departure_city')}")
-    print(f"[CURRENCY] Detected: {currency}, Airline: {extracted.get('airline')}, Departure: {extracted.get('departure_city')}")
+    logger.info(f"Currency conversion: raw={raw_currency}, normalized={currency}, airline={extracted.get('airline')}, departure={extracted.get('departure_city')}")
+    print(f"[CURRENCY] Raw: {raw_currency}, Normalized: {currency}, Airline: {extracted.get('airline')}, Departure: {extracted.get('departure_city')}")
 
     # If currency is USD but we have airline info, try to infer the actual currency
+    # (LLM may default to USD when it can't detect the currency symbol)
     if currency == "USD" and extracted.get("airline"):
         inferred_currency = infer_currency_from_airline(
             extracted.get("airline", ""),
@@ -450,8 +492,13 @@ def convert_currency(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
             state["extracted_data"] = extracted
         else:
             print(f"[CURRENCY] Could not infer currency from airline {extracted.get('airline')}")
+    elif currency != raw_currency.upper():
+        # Currency was normalized from a different representation
+        print(f"[CURRENCY] Normalized currency from '{raw_currency}' to '{currency}'")
+        extracted["currency"] = currency
+        state["extracted_data"] = extracted
     else:
-        print(f"[CURRENCY] Not inferring - currency is {currency}, airline is {extracted.get('airline')}")
+        print(f"[CURRENCY] Using detected currency: {currency}")
 
     # Store original currency info
     state["original_currency"] = currency
