@@ -239,12 +239,16 @@ export async function parseReceipt(file, forceSimulated = false) {
   // Try backend API first if available
   if (!forceSimulated) {
     const useBackend = await isBackendAvailable();
+    console.log('Backend available:', useBackend);
 
     if (useBackend) {
       try {
         console.log('Using backend AI for receipt parsing...');
+        console.log('File:', file.name, file.type, file.size, 'bytes');
         const response = await parseReceiptWithBackend(file);
+        console.log('Backend response:', response);
         const transformed = transformBackendResponse(response, file);
+        console.log('Transformed response:', transformed);
 
         if (transformed) {
           return transformed;
