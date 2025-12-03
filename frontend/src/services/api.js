@@ -3,9 +3,10 @@
  */
 
 // Version indicator for debugging cache issues
-console.log('[api.js] Module loaded - v2');
+console.log('[api.js] Module loaded - v3');
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+// Use relative URL to leverage Vite proxy (avoids CORS issues)
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 console.log('[api.js] API_BASE_URL:', API_BASE_URL);
 
 /**
@@ -219,7 +220,8 @@ export async function getBusinessRules() {
  * @returns {Promise<boolean>} - True if backend is healthy
  */
 export async function checkBackendHealth() {
-  const healthUrl = `${API_BASE_URL.replace('/api/v1', '')}/health`;
+  // Use relative URL for health check (proxied by Vite)
+  const healthUrl = '/health';
   console.log('Fetching health check from:', healthUrl);
   try {
     const response = await fetch(healthUrl, {
