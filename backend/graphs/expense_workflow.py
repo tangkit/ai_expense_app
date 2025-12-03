@@ -648,12 +648,19 @@ def build_single_expense(extracted: dict, hotel_itemization: list | None, confid
     # Parse dates using safe_date helper
     expense_date = safe_date(extracted.get("expense_date"), date.today())
 
+    # Get check-in date for hotel date incrementing
+    check_in_date = safe_date(extracted.get("check_in_date"), expense_date) if category == "hotel" else expense_date
+
     # Build hotel itemization if present
     hotel_items = None
     if hotel_itemization:
         hotel_items = []
-        for item in hotel_itemization:
-            night_date = safe_date(item.get("night_date"), expense_date)
+        for idx, item in enumerate(hotel_itemization):
+            # Try to get the night_date, but if invalid, increment from check-in date
+            night_date = safe_date(item.get("night_date"), None)
+            if night_date is None:
+                # Increment from check-in date based on index
+                night_date = check_in_date + timedelta(days=idx)
             hotel_items.append(
                 HotelNightItem(
                     night_date=night_date,
@@ -668,8 +675,12 @@ def build_single_expense(extracted: dict, hotel_itemization: list | None, confid
     elif extracted.get("hotel_nights"):
         # Hotel nights from LLM extraction
         hotel_items = []
-        for item in extracted["hotel_nights"]:
-            night_date = safe_date(item.get("night_date"), expense_date)
+        for idx, item in enumerate(extracted["hotel_nights"]):
+            # Try to get the night_date, but if invalid, increment from check-in date
+            night_date = safe_date(item.get("night_date"), None)
+            if night_date is None:
+                # Increment from check-in date based on index
+                night_date = check_in_date + timedelta(days=idx)
             hotel_items.append(
                 HotelNightItem(
                     night_date=night_date,
