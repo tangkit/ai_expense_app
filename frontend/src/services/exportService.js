@@ -44,6 +44,19 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
     return null;
   }
 
+  // Debug: Log full receipt data structure
+  uploadedReceipts.forEach((r, idx) => {
+    console.log(`Receipt ${idx + 1} structure:`, {
+      id: r.id,
+      fileName: r.fileName,
+      fileType: r.fileType,
+      uploadedAt: r.uploadedAt,
+      hasBase64: !!r.base64,
+      base64Length: r.base64?.length || 0,
+      base64Preview: r.base64?.substring(0, 50)
+    });
+  });
+
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -78,9 +91,11 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
   // Add each receipt
   for (let i = 0; i < sortedReceipts.length; i++) {
     const receipt = sortedReceipts[i];
-    console.log(`Processing receipt ${i + 1}:`, receipt.fileName, 'fileType:', receipt.fileType);
+    console.log(`\n=== Processing receipt ${i + 1}/${sortedReceipts.length} ===`);
+    console.log('  fileName:', receipt.fileName);
+    console.log('  fileType:', receipt.fileType);
     console.log('  base64 exists:', !!receipt.base64);
-    console.log('  base64 starts with data:', receipt.base64?.substring(0, 30));
+    console.log('  base64 length:', receipt.base64?.length || 0);
 
     doc.addPage();
     yPosition = margin;
@@ -110,54 +125,70 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
     doc.line(margin, yPosition, pageWidth - margin, yPosition);
     yPosition += 10;
 
-    // Check if it's an image
-    const isImage = receipt.fileType?.startsWith('image/') ||
-                    receipt.base64?.startsWith('data:image');
+    // Check if we have base64 data
+    if (!receipt.base64) {
+      console.log('  ERROR: No base64 data for this receipt!');
+      doc.setFillColor(254, 242, 242);
+      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 50, 3, 3, 'F');
+      doc.setFontSize(10);
+      doc.setTextColor(185, 28, 28);
+      doc.text('Receipt image data not available', margin + 10, yPosition + 20);
+      doc.setTextColor(107, 114, 128);
+      doc.text('The receipt file was not properly stored.', margin + 10, yPosition + 35);
+      continue;
+    }
 
+    // Check if it's an image based on data URL or file type
+    const base64Start = receipt.base64.substring(0, 30).toLowerCase();
+    const isImage = receipt.fileType?.startsWith('image/') ||
+                    base64Start.includes('data:image');
+
+    console.log('  base64 starts with:', base64Start);
     console.log('  isImage:', isImage);
 
-    if (receipt.base64 && isImage) {
+    if (isImage) {
       try {
         const imgWidth = pageWidth - 2 * margin;
         const maxHeight = pageHeight - yPosition - margin - 20;
 
         // Detect format from data URL or file type
         let imgFormat = 'JPEG';
-        if (receipt.base64.includes('data:image/png')) {
+        if (base64Start.includes('data:image/png') || receipt.fileType === 'image/png') {
           imgFormat = 'PNG';
-        } else if (receipt.base64.includes('data:image/gif')) {
+        } else if (base64Start.includes('data:image/gif') || receipt.fileType === 'image/gif') {
           imgFormat = 'GIF';
-        } else if (receipt.base64.includes('data:image/webp')) {
+        } else if (base64Start.includes('data:image/webp') || receipt.fileType === 'image/webp') {
           imgFormat = 'WEBP';
-        } else if (receipt.fileType === 'image/png') {
-          imgFormat = 'PNG';
-        } else if (receipt.fileType === 'image/gif') {
-          imgFormat = 'GIF';
         }
 
         console.log('  Using image format:', imgFormat);
+        console.log('  Image dimensions: width=', imgWidth, 'maxHeight=', maxHeight);
 
         // Add the image (scaled to fit)
         doc.addImage(receipt.base64, imgFormat, margin, yPosition, imgWidth, Math.min(maxHeight, 180), undefined, 'MEDIUM');
-        console.log('  Image added successfully');
+        console.log('  SUCCESS: Image added to PDF');
       } catch (err) {
-        console.error('Failed to embed receipt image:', err);
+        console.error('  FAILED to embed receipt image:', err);
+        console.error('  Error details:', err.message, err.stack);
+        doc.setFillColor(254, 242, 242);
+        doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 50, 3, 3, 'F');
         doc.setFontSize(10);
-        doc.setTextColor(239, 68, 68);
-        doc.text('[Image could not be embedded]', margin, yPosition);
-        yPosition += 10;
+        doc.setTextColor(185, 28, 28);
+        doc.text('[Image could not be embedded]', margin + 10, yPosition + 15);
         doc.setTextColor(107, 114, 128);
-        doc.text(`Error: ${err.message}`, margin, yPosition);
+        doc.text(`Error: ${err.message}`, margin + 10, yPosition + 30);
+        doc.text(`Format attempted: ${imgFormat || 'Unknown'}`, margin + 10, yPosition + 42);
       }
     } else {
       // For PDFs or unsupported formats, show info box
-      console.log('  Not an image or no base64, showing info box');
+      console.log('  Not an image format, showing info box');
       doc.setFillColor(248, 250, 252);
-      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 40, 3, 3, 'F');
+      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 50, 3, 3, 'F');
       doc.setFontSize(10);
       doc.setTextColor(71, 85, 105);
       doc.text(`File Name: ${receipt.fileName}`, margin + 10, yPosition + 15);
       doc.text(`File Type: ${receipt.fileType || 'Unknown'}`, margin + 10, yPosition + 28);
+      doc.text('(Non-image files are listed but not embedded)', margin + 10, yPosition + 41);
     }
   }
 
@@ -410,8 +441,8 @@ function getFieldValue(expense, fieldName) {
  */
 const CURRENCY_FORMATS = {
   'MYR': { symbol: 'RM', format: 'RM#,##0.00' },
-  'SGD': { symbol: 'S$', format: 'S$#,##0.00' },
-  'USD': { symbol: 'US$', format: 'US$#,##0.00' },
+  'SGD': { symbol: 'SGD', format: 'SGD#,##0.00' },
+  'USD': { symbol: 'USD', format: 'USD#,##0.00' },
   'EUR': { symbol: '€', format: '€#,##0.00' },
   'GBP': { symbol: '£', format: '£#,##0.00' },
   'JPY': { symbol: '¥', format: '¥#,##0' },
@@ -959,7 +990,7 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
           console.log(`Conversion Rate column "${colName}" detected, value:`, value);
         }
       }
-      // Special handling for Amount (Reimbursed) - show S$ converted amount
+      // Special handling for Amount (Reimbursed) - show SGD converted amount
       else if (normalizedColName.includes('amount') && normalizedColName.includes('reimburs')) {
         const localAmount = expense.amount || expense.total || 0;
         // If already SGD, use the same value; otherwise convert
@@ -1006,31 +1037,25 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
 
   console.log('Populated', rowsToInsert, 'expense rows starting at row', dataStartRow);
 
-  // Populate TOTAL row with column sums if TOTAL row exists
+  // Populate TOTAL row with Amount (Reimbursed) sum only
+  // Note: Amount (Local) is not summed because expenses may have different currencies
   if (totalRowIndex >= 0) {
     console.log('=== Populating TOTAL row at row', totalRowIndex, '===');
 
-    // Find which columns are Amount (Local) and Amount (Reimbursed)
-    let amountLocalColIndex = -1;
+    // Find Amount (Reimbursed) column index
     let amountReimbursedColIndex = -1;
 
     companyTemplate.columns.forEach((colName, idx) => {
       const normalizedColName = colName.toLowerCase().trim();
-      if (normalizedColName.includes('amount') && normalizedColName.includes('local')) {
-        amountLocalColIndex = columnIndices[idx];
-        console.log(`Found Amount (Local) column at index ${amountLocalColIndex}`);
-      }
       if (normalizedColName.includes('amount') && normalizedColName.includes('reimburs')) {
         amountReimbursedColIndex = columnIndices[idx];
         console.log(`Found Amount (Reimbursed) column at index ${amountReimbursedColIndex}`);
       }
     });
 
-    // Calculate sums from populated data
-    let sumLocal = 0;
+    // Calculate sum for Amount (Reimbursed) only - all converted to SGD
     let sumReimbursed = 0;
 
-    // Sum up the amounts from each expense
     for (let i = 0; i < rowsToInsert; i++) {
       const expense = expandedExpenses[i];
       const localCurrency = (expense.currency || 'SGD').toUpperCase();
@@ -1038,39 +1063,19 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
       const isSGD = localCurrency === 'SGD';
 
       const localAmount = expense.amount || expense.total || 0;
-      sumLocal += roundTo2Decimals(localAmount);
-
       // Reimbursed amount: if already SGD use same value, otherwise convert
       const reimbursedAmount = isSGD ? localAmount : (localAmount * exchangeRate);
       sumReimbursed += roundTo2Decimals(reimbursedAmount);
     }
 
-    // Round final sums
-    sumLocal = roundTo2Decimals(sumLocal);
+    // Round final sum
     sumReimbursed = roundTo2Decimals(sumReimbursed);
-
-    console.log(`Total Amount (Local): ${sumLocal}`);
     console.log(`Total Amount (Reimbursed): ${sumReimbursed}`);
 
-    // Populate the TOTAL row cells
-    if (amountLocalColIndex >= 0) {
-      const totalLocalCell = worksheet.getCell(totalRowIndex, amountLocalColIndex);
-      // Format with currency - determine most common currency or default to SGD
-      const currencies = expandedExpenses.slice(0, rowsToInsert).map(e => (e.currency || 'SGD').toUpperCase());
-      const mostCommonCurrency = currencies.reduce((acc, curr) => {
-        acc[curr] = (acc[curr] || 0) + 1;
-        return acc;
-      }, {});
-      const primaryCurrency = Object.keys(mostCommonCurrency).reduce((a, b) =>
-        mostCommonCurrency[a] > mostCommonCurrency[b] ? a : b, 'SGD');
-
-      totalLocalCell.value = formatCurrencyValue(sumLocal, primaryCurrency);
-      console.log(`Set TOTAL Amount (Local) cell to: ${totalLocalCell.value}`);
-    }
-
+    // Populate the TOTAL row cell for Amount (Reimbursed)
     if (amountReimbursedColIndex >= 0) {
       const totalReimbursedCell = worksheet.getCell(totalRowIndex, amountReimbursedColIndex);
-      // Always format reimbursed amount as SGD
+      // Format as SGD (official currency code for Singapore Dollars)
       totalReimbursedCell.value = formatCurrencyValue(sumReimbursed, 'SGD');
       console.log(`Set TOTAL Amount (Reimbursed) cell to: ${totalReimbursedCell.value}`);
     }
