@@ -3,6 +3,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { format, addDays } from 'date-fns';
 import { parseReceiptWithBackend, checkBackendHealth } from './api';
 
+// Version indicator for debugging cache issues
+console.log('[receiptParser.js] Module loaded - v2');
+
 /**
  * Receipt parsing service with backend AI support.
  * Falls back to simulated parsing when backend is unavailable.

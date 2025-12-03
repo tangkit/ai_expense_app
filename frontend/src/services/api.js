@@ -2,7 +2,11 @@
  * API service for communicating with the backend expense processing server.
  */
 
+// Version indicator for debugging cache issues
+console.log('[api.js] Module loaded - v2');
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+console.log('[api.js] API_BASE_URL:', API_BASE_URL);
 
 /**
  * Convert a File object to base64 string
