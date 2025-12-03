@@ -1,13 +1,61 @@
-import React from 'react';
-import { FileText, X, Save, Briefcase, User, Building, Calendar } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { FileText, X, Save, Briefcase, User, Building, Calendar, BadgeCheck } from 'lucide-react';
 import { useExpense } from '../context/ExpenseContext';
+
+/**
+ * Generate expense title from business purpose
+ */
+function generateExpenseTitle(businessPurpose) {
+  if (!businessPurpose || businessPurpose.trim().length === 0) {
+    return '';
+  }
+
+  // Extract key words and create a concise title
+  const purpose = businessPurpose.trim();
+
+  // Common patterns to extract
+  const patterns = [
+    /(?:for|to|attend|attending)\s+(.+?)(?:\s+in\s+|\s+at\s+|$)/i,
+    /(.+?)\s+(?:trip|travel|conference|meeting|visit)/i,
+    /(?:business\s+)?trip\s+(?:to|for)\s+(.+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = purpose.match(pattern);
+    if (match && match[1]) {
+      // Capitalize first letter of each word
+      return match[1]
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ')
+        .substring(0, 50); // Limit length
+    }
+  }
+
+  // Fallback: use first 50 chars of purpose
+  return purpose.substring(0, 50) + (purpose.length > 50 ? '...' : '');
+}
 
 export default function ClaimInfoForm({ onSave, onCancel }) {
   const { claimInfo, updateClaimInfo } = useExpense();
 
   const handleChange = (field, value) => {
     updateClaimInfo({ [field]: value });
+
+    // Auto-generate expense title when business purpose changes
+    if (field === 'businessPurpose') {
+      const title = generateExpenseTitle(value);
+      updateClaimInfo({ expenseTitle: title });
+    }
   };
+
+  // Generate initial title if business purpose exists but title doesn't
+  useEffect(() => {
+    if (claimInfo.businessPurpose && !claimInfo.expenseTitle) {
+      const title = generateExpenseTitle(claimInfo.businessPurpose);
+      updateClaimInfo({ expenseTitle: title });
+    }
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -27,74 +75,100 @@ export default function ClaimInfoForm({ onSave, onCancel }) {
       </div>
 
       <form onSubmit={handleSubmit}>
-        <div className="form-group">
-          <label>
-            <Briefcase size={16} />
-            Expense Claim Name *
-          </label>
-          <input
-            type="text"
-            value={claimInfo.claimName || ''}
-            onChange={(e) => handleChange('claimName', e.target.value)}
-            placeholder="e.g., Q4 2024 Sales Conference Trip"
-            required
-          />
-          <span className="help-text">A descriptive name for this expense report</span>
-        </div>
+        {/* Employee Information Section */}
+        <div className="form-section">
+          <h4>Employee Information</h4>
+          <p className="section-note">This information is saved and will be remembered for future claims.</p>
 
-        <div className="form-group">
-          <label>
-            <FileText size={16} />
-            Business Purpose *
-          </label>
-          <textarea
-            value={claimInfo.businessPurpose || ''}
-            onChange={(e) => handleChange('businessPurpose', e.target.value)}
-            placeholder="e.g., Attended annual sales conference in Chicago to meet with key clients and present new product offerings"
-            rows={3}
-            required
-          />
-          <span className="help-text">Explain the business reason for these expenses</span>
-        </div>
-
-        <div className="form-row">
           <div className="form-group">
             <label>
               <User size={16} />
-              Traveler Name
+              Employee Name *
             </label>
             <input
               type="text"
-              value={claimInfo.travelerName || ''}
-              onChange={(e) => handleChange('travelerName', e.target.value)}
+              value={claimInfo.employeeName || ''}
+              onChange={(e) => handleChange('employeeName', e.target.value)}
               placeholder="Your full name"
+              required
             />
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>
+                <BadgeCheck size={16} />
+                Job Position *
+              </label>
+              <input
+                type="text"
+                value={claimInfo.jobPosition || ''}
+                onChange={(e) => handleChange('jobPosition', e.target.value)}
+                placeholder="e.g., Sales Manager, Software Engineer"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>
+                <Building size={16} />
+                Department *
+              </label>
+              <input
+                type="text"
+                value={claimInfo.department || ''}
+                onChange={(e) => handleChange('department', e.target.value)}
+                placeholder="e.g., Sales, Engineering, Marketing"
+                required
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Trip/Claim Details Section */}
+        <div className="form-section">
+          <h4>Trip Details</h4>
+
+          <div className="form-group">
+            <label>
+              <FileText size={16} />
+              Purpose of Business Trip *
+            </label>
+            <textarea
+              value={claimInfo.businessPurpose || ''}
+              onChange={(e) => handleChange('businessPurpose', e.target.value)}
+              placeholder="e.g., Attended annual sales conference in Chicago to meet with key clients and present new product offerings"
+              rows={3}
+              required
+            />
+            <span className="help-text">Explain the business reason for these expenses</span>
           </div>
 
           <div className="form-group">
             <label>
-              <Building size={16} />
-              Department
+              <Briefcase size={16} />
+              Expense Title
             </label>
             <input
               type="text"
-              value={claimInfo.department || ''}
-              onChange={(e) => handleChange('department', e.target.value)}
-              placeholder="e.g., Sales, Engineering"
+              value={claimInfo.expenseTitle || ''}
+              onChange={(e) => handleChange('expenseTitle', e.target.value)}
+              placeholder="Auto-generated from business purpose"
+            />
+            <span className="help-text">Auto-generated from purpose. You can edit if needed.</span>
+          </div>
+
+          <div className="form-group">
+            <label>
+              <Calendar size={16} />
+              Submission Date
+            </label>
+            <input
+              type="date"
+              value={claimInfo.submissionDate || new Date().toISOString().split('T')[0]}
+              onChange={(e) => handleChange('submissionDate', e.target.value)}
             />
           </div>
-        </div>
-
-        <div className="form-group">
-          <label>
-            <Calendar size={16} />
-            Submission Date
-          </label>
-          <input
-            type="date"
-            value={claimInfo.submissionDate || new Date().toISOString().split('T')[0]}
-            onChange={(e) => handleChange('submissionDate', e.target.value)}
-          />
         </div>
 
         <div className="form-actions">

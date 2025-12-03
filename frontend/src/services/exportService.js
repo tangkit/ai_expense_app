@@ -506,14 +506,91 @@ function findFooterSectionExcelJS(worksheet, headerRowIndex, totalRows) {
 }
 
 /**
+ * Populate claim info fields in header and footer sections
+ * Looks for cells containing keywords like "Employee Name:", "Position:", "Title:", etc.
+ * and fills in the adjacent cell with the corresponding value
+ */
+function populateClaimInfoFields(worksheet, headerRow, totalRows, claimInfo) {
+  console.log('=== Populating Claim Info Fields ===');
+
+  // Define field mappings: keyword patterns -> claimInfo field
+  const fieldMappings = [
+    { patterns: ['employee name', 'name:', 'employee:'], field: 'employeeName', label: 'Employee Name' },
+    { patterns: ['position', 'job title', 'title:', 'designation'], field: 'jobPosition', label: 'Job Position' },
+    { patterns: ['department', 'dept', 'division'], field: 'department', label: 'Department' },
+    { patterns: ['expense title', 'claim title', 'report title', 'title of expense'], field: 'expenseTitle', label: 'Expense Title' },
+    { patterns: ['purpose', 'business purpose', 'trip purpose', 'reason'], field: 'businessPurpose', label: 'Business Purpose' },
+    { patterns: ['submission date', 'date submitted', 'claim date'], field: 'submissionDate', label: 'Submission Date' },
+  ];
+
+  // Scan header section (rows before the data header)
+  for (let rowNum = 1; rowNum < headerRow; rowNum++) {
+    const row = worksheet.getRow(rowNum);
+    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      const cellValue = cell.value ? String(cell.value).toLowerCase().trim() : '';
+
+      for (const mapping of fieldMappings) {
+        for (const pattern of mapping.patterns) {
+          if (cellValue.includes(pattern)) {
+            const value = claimInfo[mapping.field];
+            if (value) {
+              // Find the cell to fill - check if current cell ends with ":" or next cell
+              const nextCell = worksheet.getCell(rowNum, colNumber + 1);
+
+              if (cellValue.endsWith(':') || !nextCell.value) {
+                // Fill the next cell
+                nextCell.value = value;
+                console.log(`Filled ${mapping.label} at row ${rowNum}, col ${colNumber + 1}: "${value}"`);
+              } else {
+                // Check if the cell itself should be replaced (e.g., "Employee Name: [value]")
+                // In this case, append value after the label
+                cell.value = `${cell.value} ${value}`;
+                console.log(`Appended ${mapping.label} at row ${rowNum}, col ${colNumber}: "${value}"`);
+              }
+            }
+            return; // Found match, move to next cell
+          }
+        }
+      }
+    });
+  }
+
+  // Also scan footer section (rows after data area)
+  for (let rowNum = headerRow + 1; rowNum <= totalRows; rowNum++) {
+    const row = worksheet.getRow(rowNum);
+    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+      const cellValue = cell.value ? String(cell.value).toLowerCase().trim() : '';
+
+      for (const mapping of fieldMappings) {
+        for (const pattern of mapping.patterns) {
+          if (cellValue.includes(pattern)) {
+            const value = claimInfo[mapping.field];
+            if (value) {
+              const nextCell = worksheet.getCell(rowNum, colNumber + 1);
+
+              if (cellValue.endsWith(':') || !nextCell.value) {
+                nextCell.value = value;
+                console.log(`Filled ${mapping.label} at footer row ${rowNum}, col ${colNumber + 1}: "${value}"`);
+              }
+            }
+            return;
+          }
+        }
+      }
+    });
+  }
+}
+
+/**
  * Populate the original company template with expense data using ExcelJS
  * Preserves original formatting, structure, and footer section
  */
-async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
+async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimInfo = null) {
   console.log('=== Populating Original Template with ExcelJS ===');
   console.log('Template name:', companyTemplate.name);
   console.log('Header row index (0-indexed):', companyTemplate.headerRowIndex);
   console.log('Columns:', companyTemplate.columns);
+  console.log('Claim info:', claimInfo);
 
   // Decode base64 content back to ArrayBuffer
   const binaryString = atob(companyTemplate.fileContent);
@@ -537,6 +614,11 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
   // Get total rows
   const totalRows = worksheet.rowCount;
   console.log('Total rows in template:', totalRows);
+
+  // Populate claim info fields in header/footer sections
+  if (claimInfo) {
+    populateClaimInfoFields(worksheet, headerRow, totalRows, claimInfo);
+  }
 
   // Find footer section to preserve it
   const footerRowIndex = findFooterSectionExcelJS(worksheet, headerRow, totalRows);
@@ -743,7 +825,7 @@ export async function exportToExcel(expenses, filename = 'expense_report', claim
     console.log('>>> Using ExcelJS populateOriginalTemplate - filling original template with full style preservation');
 
     try {
-      const buffer = await populateOriginalTemplateExcelJS(expenses, companyTemplate);
+      const buffer = await populateOriginalTemplateExcelJS(expenses, companyTemplate, claimInfo);
 
       // Download the file
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

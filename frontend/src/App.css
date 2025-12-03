@@ -563,6 +563,13 @@ body {
   gap: 8px;
 }
 
+.form-section .section-note {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin: -8px 0 12px 0;
+  font-style: italic;
+}
+
 .required-badge {
   background: var(--warning-color);
   color: white;

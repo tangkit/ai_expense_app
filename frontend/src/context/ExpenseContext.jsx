@@ -4,19 +4,52 @@ import { EXPENSE_CATEGORIES, MEAL_COMPANION_THRESHOLD } from '../constants/expen
 
 // Storage key for persistence
 const STORAGE_KEY = 'expense_claim_data';
+const EMPLOYEE_INFO_KEY = 'employee_info'; // Persistent employee info across sessions
+
+// Load persisted employee info (separate from expense data)
+function loadEmployeeInfo() {
+  try {
+    const saved = localStorage.getItem(EMPLOYEE_INFO_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (error) {
+    console.error('Failed to load employee info:', error);
+  }
+  return null;
+}
 
 // Load persisted state from localStorage
 function loadPersistedState() {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
+    const employeeInfo = loadEmployeeInfo();
+
     if (saved) {
       const parsed = JSON.parse(saved);
       return {
         expenses: parsed.expenses || [],
         messages: parsed.messages || [],
-        claimInfo: parsed.claimInfo || { claimName: '', businessPurpose: '' },
+        claimInfo: {
+          ...parsed.claimInfo,
+          // Merge with persistent employee info
+          employeeName: employeeInfo?.employeeName || parsed.claimInfo?.employeeName || '',
+          jobPosition: employeeInfo?.jobPosition || parsed.claimInfo?.jobPosition || '',
+          department: employeeInfo?.department || parsed.claimInfo?.department || '',
+        },
         companyTemplate: parsed.companyTemplate || null,
         uploadedReceipts: parsed.uploadedReceipts || []
+      };
+    }
+
+    // Return employee info even if no saved expense data
+    if (employeeInfo) {
+      return {
+        claimInfo: {
+          employeeName: employeeInfo.employeeName || '',
+          jobPosition: employeeInfo.jobPosition || '',
+          department: employeeInfo.department || '',
+        }
       };
     }
   } catch (error) {
@@ -37,11 +70,14 @@ const getInitialState = () => {
     error: null,
     pendingUploads: [],
     reportSummary: null,
-    // New fields
+    // Claim info fields
     claimInfo: persisted?.claimInfo || {
       claimName: '',
+      expenseTitle: '',  // Generated from businessPurpose
       businessPurpose: '',
-      travelerName: '',
+      // Employee info (persisted separately)
+      employeeName: '',
+      jobPosition: '',
       department: '',
       submissionDate: new Date().toISOString().split('T')[0]
     },
@@ -250,6 +286,26 @@ export function ExpenseProvider({ children }) {
       console.error('Failed to persist state:', error);
     }
   }, [state.expenses, state.messages, state.claimInfo, state.companyTemplate, state.uploadedReceipts, state.isInitialized]);
+
+  // Persist employee info separately (survives expense data clearing)
+  useEffect(() => {
+    if (!state.isInitialized) return;
+
+    const employeeInfo = {
+      employeeName: state.claimInfo?.employeeName || '',
+      jobPosition: state.claimInfo?.jobPosition || '',
+      department: state.claimInfo?.department || ''
+    };
+
+    // Only save if at least one field has a value
+    if (employeeInfo.employeeName || employeeInfo.jobPosition || employeeInfo.department) {
+      try {
+        localStorage.setItem(EMPLOYEE_INFO_KEY, JSON.stringify(employeeInfo));
+      } catch (error) {
+        console.error('Failed to persist employee info:', error);
+      }
+    }
+  }, [state.claimInfo?.employeeName, state.claimInfo?.jobPosition, state.claimInfo?.department, state.isInitialized]);
 
   // Mark as initialized after first render (prevents StrictMode double initialization)
   useEffect(() => {
