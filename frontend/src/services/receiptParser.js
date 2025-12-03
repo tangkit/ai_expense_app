@@ -129,19 +129,34 @@ function generateHotelItemization(checkIn, checkOut, totalAmount, taxRate = 0.12
  */
 async function isBackendAvailable() {
   const now = Date.now();
+
+  // Check cache first
   if (backendAvailable !== null && (now - lastHealthCheck) < HEALTH_CHECK_INTERVAL) {
+    console.log('Using cached backend status:', backendAvailable);
     return backendAvailable;
   }
 
+  console.log('Checking backend health...');
   try {
     backendAvailable = await checkBackendHealth();
     lastHealthCheck = now;
+    console.log('Backend health check result:', backendAvailable);
     return backendAvailable;
-  } catch {
+  } catch (error) {
+    console.error('Backend health check error:', error);
     backendAvailable = false;
     lastHealthCheck = now;
     return false;
   }
+}
+
+/**
+ * Force reset backend availability cache (useful for debugging)
+ */
+export function resetBackendCache() {
+  backendAvailable = null;
+  lastHealthCheck = 0;
+  console.log('Backend cache reset');
 }
 
 /**

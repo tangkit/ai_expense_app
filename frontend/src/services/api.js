@@ -215,13 +215,17 @@ export async function getBusinessRules() {
  * @returns {Promise<boolean>} - True if backend is healthy
  */
 export async function checkBackendHealth() {
+  const healthUrl = `${API_BASE_URL.replace('/api/v1', '')}/health`;
+  console.log('Fetching health check from:', healthUrl);
   try {
-    const response = await fetch(`${API_BASE_URL.replace('/api/v1', '')}/health`, {
+    const response = await fetch(healthUrl, {
       method: 'GET',
       signal: AbortSignal.timeout(5000),
     });
+    console.log('Health check response:', response.status, response.ok);
     return response.ok;
-  } catch {
+  } catch (error) {
+    console.error('Health check fetch error:', error);
     return false;
   }
 }
