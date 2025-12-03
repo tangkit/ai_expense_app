@@ -3,9 +3,9 @@
 RECEIPT_EXTRACTION_PROMPT = """You are an expert expense receipt parser. Analyze the provided receipt image, PDF, or text and extract all relevant expense information.
 
 Extract the following fields:
-1. **vendor**: The merchant/vendor name (e.g., "Marriott Hotels", "Uber", "Batik Air", "AirAsia", "Malaysia Airlines")
+1. **vendor**: The merchant/vendor name (e.g., "Marriott Hotels", "Uber", "Batik Air", "AirAsia", "Malaysia Airlines", "Hilton Singapore", "Grand Hyatt Kuala Lumpur")
 2. **category**: One of: taxi, rideshare, hotel, flight, meal, parking, toll, public_transport, car_rental, fuel, conference, office_supplies, other
-3. **expense_date**: The date of the transaction (YYYY-MM-DD format). For flights, use the departure date.
+3. **expense_date**: The date of the transaction (YYYY-MM-DD format). For flights, use the departure date. For hotels, use the check-in date.
 4. **subtotal**: Amount before tax
 5. **tax**: Tax amount (0 if not shown)
 6. **total**: Total amount paid
@@ -23,9 +23,16 @@ For FLIGHT tickets/Electronic Ticket Receipts, also extract:
 - **booking_reference**: PNR/Booking reference code
 
 For HOTEL receipts, also extract:
-- **check_in_date**: Check-in date
-- **check_out_date**: Check-out date
+- **vendor**: The FULL HOTEL NAME (e.g., "Grand Hyatt Singapore", "Marriott Kuala Lumpur", "Holiday Inn Express", "The Ritz-Carlton"). Look for the hotel name in the header, letterhead, or title of the receipt.
+- **check_in_date**: Check-in date (YYYY-MM-DD format)
+- **check_out_date**: Check-out date (YYYY-MM-DD format)
 - **hotel_nights**: List of nightly charges with room_rate, room_tax, service_charge, resort_fee, parking_fee, other_fees for each night
+
+HOTEL NAME DETECTION TIPS:
+- Look at the TOP of the receipt for the hotel name/logo
+- Common patterns: "[Hotel Brand] [Location]" like "Hilton Singapore", "Marriott Kuala Lumpur"
+- Look for letterhead, header text, or "INVOICE FROM:" sections
+- Hotel brands: Marriott, Hilton, Hyatt, IHG, Accor, Shangri-La, Four Seasons, Ritz-Carlton, Westin, Sheraton, Holiday Inn, Crowne Plaza, DoubleTree, Hampton Inn, Courtyard, Fairfield, Residence Inn, etc.
 
 For MEAL receipts:
 - Note if the total exceeds $25 (requires companion information for compliance)
