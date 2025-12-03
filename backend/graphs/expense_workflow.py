@@ -570,6 +570,16 @@ def convert_currency(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     return state
 
 
+def safe_decimal(value, default=0) -> Decimal:
+    """Safely convert a value to Decimal, handling None/null values."""
+    if value is None:
+        return Decimal(str(default))
+    try:
+        return Decimal(str(value))
+    except:
+        return Decimal(str(default))
+
+
 def build_expense_output(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     """Build the final ExtractedExpense output."""
     if state.get("error"):
@@ -596,12 +606,12 @@ def build_expense_output(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
                 hotel_items.append(
                     HotelNightItem(
                         night_date=night_date,
-                        room_rate=Decimal(str(item.get("room_rate", 0))),
-                        room_tax=Decimal(str(item.get("room_tax", 0))),
-                        service_charge=Decimal(str(item.get("service_charge", 0))),
-                        resort_fee=Decimal(str(item.get("resort_fee", 0))),
-                        parking_fee=Decimal(str(item.get("parking_fee", 0))),
-                        other_fees=Decimal(str(item.get("other_fees", 0))),
+                        room_rate=safe_decimal(item.get("room_rate")),
+                        room_tax=safe_decimal(item.get("room_tax")),
+                        service_charge=safe_decimal(item.get("service_charge")),
+                        resort_fee=safe_decimal(item.get("resort_fee")),
+                        parking_fee=safe_decimal(item.get("parking_fee")),
+                        other_fees=safe_decimal(item.get("other_fees")),
                     )
                 )
 
@@ -628,19 +638,24 @@ def build_expense_output(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
             except:
                 exchange_rate_date = date.today()
 
+        # Get subtotal, defaulting to total if not provided
+        subtotal_val = extracted.get("subtotal")
+        if subtotal_val is None:
+            subtotal_val = extracted.get("total", 0)
+
         expense = ExtractedExpense(
             vendor=extracted.get("vendor", "Unknown"),
             category=ExpenseCategory(category),
             expense_date=expense_date,
             description=extracted.get("description"),
-            subtotal=Decimal(str(extracted.get("subtotal", extracted.get("total", 0)))),
-            tax=Decimal(str(extracted.get("tax", 0))),
-            total=Decimal(str(extracted.get("total", 0))),
+            subtotal=safe_decimal(subtotal_val),
+            tax=safe_decimal(extracted.get("tax")),
+            total=safe_decimal(extracted.get("total")),
             currency=extracted.get("currency", "USD"),
             # Currency conversion fields
             original_currency=extracted.get("original_currency"),
-            original_amount=Decimal(str(extracted.get("original_amount"))) if extracted.get("original_amount") else None,
-            exchange_rate=Decimal(str(extracted.get("exchange_rate"))) if extracted.get("exchange_rate") else None,
+            original_amount=safe_decimal(extracted.get("original_amount")) if extracted.get("original_amount") is not None else None,
+            exchange_rate=safe_decimal(extracted.get("exchange_rate")) if extracted.get("exchange_rate") is not None else None,
             exchange_rate_source=extracted.get("exchange_rate_source"),
             exchange_rate_date=exchange_rate_date,
             # Receipt info
