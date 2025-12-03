@@ -640,12 +640,12 @@ body {
 }
 
 .currency-input input {
-  padding-left: 28px;
+  padding-left: 38px;
   width: 100%;
 }
 
 .currency-input.small input {
-  padding: 8px 8px 8px 24px;
+  padding: 8px 8px 8px 34px;
   font-size: 0.875rem;
 }
 
