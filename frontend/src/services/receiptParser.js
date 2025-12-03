@@ -163,15 +163,9 @@ export function resetBackendCache() {
 }
 
 /**
- * Transform backend response to frontend format
+ * Transform a single expense from backend to frontend format
  */
-function transformBackendResponse(response, file) {
-  if (!response.success || !response.expense) {
-    return null;
-  }
-
-  const expense = response.expense;
-
+function transformSingleExpense(expense, file, rawText) {
   // Transform hotel itemization
   let hotelItemization = null;
   if (expense.hotel_itemization && expense.hotel_itemization.length > 0) {
@@ -218,7 +212,7 @@ function transformBackendResponse(response, file) {
     fileSize: file.size,
     uploadedAt: new Date().toISOString(),
     confidence: expense.confidence_score || 0.9,
-    rawText: response.raw_text || '',
+    rawText: rawText || '',
     extracted: {
       vendor: expense.vendor,
       category: expense.category,
@@ -248,10 +242,34 @@ function transformBackendResponse(response, file) {
 }
 
 /**
+ * Transform backend response to frontend format
+ * Returns an array of parsed expenses (handles multiple receipts in one document)
+ */
+function transformBackendResponse(response, file) {
+  if (!response.success) {
+    return null;
+  }
+
+  // Handle multiple expenses (new format)
+  if (response.expenses && response.expenses.length > 0) {
+    return response.expenses.map(expense =>
+      transformSingleExpense(expense, file, response.raw_text)
+    );
+  }
+
+  // Fallback to single expense (backward compatibility)
+  if (response.expense) {
+    return [transformSingleExpense(response.expense, file, response.raw_text)];
+  }
+
+  return null;
+}
+
+/**
  * Parse receipt file and extract expense data
  * @param {File} file - The uploaded receipt file
  * @param {boolean} forceSimulated - Force use of simulated parsing
- * @returns {Promise<Object>} - Parsed expense data
+ * @returns {Promise<Array>} - Array of parsed expense data (may contain multiple receipts from single document)
  */
 export async function parseReceipt(file, forceSimulated = false) {
   // Try backend API first if available
@@ -268,7 +286,8 @@ export async function parseReceipt(file, forceSimulated = false) {
         const transformed = transformBackendResponse(response, file);
         console.log('Transformed response:', transformed);
 
-        if (transformed) {
+        if (transformed && transformed.length > 0) {
+          // Return array of expenses (may be multiple from single document)
           return transformed;
         }
         // Fall through to simulated if transformation failed
@@ -279,9 +298,10 @@ export async function parseReceipt(file, forceSimulated = false) {
     }
   }
 
-  // Fallback to simulated parsing
+  // Fallback to simulated parsing (returns single expense wrapped in array)
   console.log('Using simulated receipt parsing...');
-  return parseReceiptSimulated(file);
+  const simulated = await parseReceiptSimulated(file);
+  return [simulated];
 }
 
 /**

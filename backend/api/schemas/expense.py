@@ -144,7 +144,8 @@ class ExpenseParseResponse(BaseModel):
     """Response model for parsed receipt."""
 
     success: bool = Field(..., description="Whether parsing succeeded")
-    expense: Optional[ExtractedExpense] = Field(None, description="Extracted expense data")
+    expense: Optional[ExtractedExpense] = Field(None, description="First extracted expense (for backward compatibility)")
+    expenses: list[ExtractedExpense] = Field(default_factory=list, description="All extracted expenses from document")
     raw_text: Optional[str] = Field(None, description="Raw text extracted from receipt")
     error_message: Optional[str] = Field(None, description="Error message if failed")
     processing_time_ms: int = Field(..., description="Processing time in milliseconds")

@@ -60,7 +60,8 @@ class ExpenseWorkflowState(TypedDict):
 
     # Processing stages
     raw_text: str | None
-    extracted_data: dict | None
+    extracted_data: dict | None  # Legacy single receipt (kept for compatibility)
+    extracted_receipts: list[dict] | None  # Multiple receipts from document
     category: str | None
     hotel_itemization: list[dict] | None
 
@@ -73,7 +74,8 @@ class ExpenseWorkflowState(TypedDict):
     converted_amount: Decimal | None
 
     # Output
-    expense: ExtractedExpense | None
+    expense: ExtractedExpense | None  # Legacy single expense
+    expenses: list[ExtractedExpense] | None  # Multiple expenses from document
     validation_errors: list[str]
     validation_warnings: list[str]
 
@@ -168,10 +170,23 @@ def parse_receipt(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
         extracted_data = extract_json_from_response(response_text)
 
         if extracted_data:
-            state["extracted_data"] = extracted_data
-            state["category"] = extracted_data.get("category", "other")
             state["raw_text"] = response_text
             state["confidence_score"] = 0.85
+
+            # Handle new multi-receipt format
+            if "receipts" in extracted_data and isinstance(extracted_data["receipts"], list):
+                receipts = extracted_data["receipts"]
+                state["extracted_receipts"] = receipts
+                # For backward compatibility, also set extracted_data to first receipt
+                if receipts:
+                    state["extracted_data"] = receipts[0]
+                    state["category"] = receipts[0].get("category", "other")
+            else:
+                # Legacy single receipt format - wrap in array
+                state["extracted_receipts"] = [extracted_data]
+                state["extracted_data"] = extracted_data
+                state["category"] = extracted_data.get("category", "other")
+
             state["processing_stage"] = "parsed"
         else:
             state["error"] = "Failed to extract structured data from receipt"
@@ -621,93 +636,135 @@ def safe_date(value, default=None) -> date | None:
     return default if default else date.today()
 
 
+def build_single_expense(extracted: dict, hotel_itemization: list | None, confidence_score: float) -> ExtractedExpense:
+    """Build a single ExtractedExpense from extracted data."""
+    category = extracted.get("category", "other")
+
+    # Validate category
+    valid_categories = [c.value for c in ExpenseCategory]
+    if category not in valid_categories:
+        category = "other"
+
+    # Parse dates using safe_date helper
+    expense_date = safe_date(extracted.get("expense_date"), date.today())
+
+    # Build hotel itemization if present
+    hotel_items = None
+    if hotel_itemization:
+        hotel_items = []
+        for item in hotel_itemization:
+            night_date = safe_date(item.get("night_date"), expense_date)
+            hotel_items.append(
+                HotelNightItem(
+                    night_date=night_date,
+                    room_rate=safe_decimal(item.get("room_rate")),
+                    room_tax=safe_decimal(item.get("room_tax")),
+                    service_charge=safe_decimal(item.get("service_charge")),
+                    resort_fee=safe_decimal(item.get("resort_fee")),
+                    parking_fee=safe_decimal(item.get("parking_fee")),
+                    other_fees=safe_decimal(item.get("other_fees")),
+                )
+            )
+    elif extracted.get("hotel_nights"):
+        # Hotel nights from LLM extraction
+        hotel_items = []
+        for item in extracted["hotel_nights"]:
+            night_date = safe_date(item.get("night_date"), expense_date)
+            hotel_items.append(
+                HotelNightItem(
+                    night_date=night_date,
+                    room_rate=safe_decimal(item.get("room_rate")),
+                    room_tax=safe_decimal(item.get("room_tax")),
+                    service_charge=safe_decimal(item.get("service_charge")),
+                    resort_fee=safe_decimal(item.get("resort_fee")),
+                    parking_fee=safe_decimal(item.get("parking_fee")),
+                    other_fees=safe_decimal(item.get("other_fees")),
+                )
+            )
+
+    # Parse check-in/check-out dates for hotels
+    check_in = None
+    check_out = None
+    if category == "hotel":
+        if extracted.get("check_in_date"):
+            check_in = safe_date(extracted["check_in_date"])
+        if extracted.get("check_out_date"):
+            check_out = safe_date(extracted["check_out_date"])
+
+    # Parse currency conversion dates
+    exchange_rate_date = None
+    if extracted.get("exchange_rate_date"):
+        exchange_rate_date = safe_date(extracted["exchange_rate_date"], date.today())
+
+    # Get subtotal, defaulting to total if not provided
+    subtotal_val = extracted.get("subtotal")
+    if subtotal_val is None:
+        subtotal_val = extracted.get("total", 0)
+
+    return ExtractedExpense(
+        vendor=extracted.get("vendor", "Unknown"),
+        category=ExpenseCategory(category),
+        expense_date=expense_date,
+        description=extracted.get("description"),
+        subtotal=safe_decimal(subtotal_val),
+        tax=safe_decimal(extracted.get("tax")),
+        total=safe_decimal(extracted.get("total")),
+        currency=extracted.get("currency", "USD"),
+        # Currency conversion fields
+        original_currency=extracted.get("original_currency"),
+        original_amount=safe_decimal(extracted.get("original_amount")) if extracted.get("original_amount") is not None else None,
+        exchange_rate=safe_decimal(extracted.get("exchange_rate")) if extracted.get("exchange_rate") is not None else None,
+        exchange_rate_source=extracted.get("exchange_rate_source"),
+        exchange_rate_date=exchange_rate_date,
+        # Receipt info
+        receipt_number=extracted.get("receipt_number"),
+        payment_method=extracted.get("payment_method"),
+        # Hotel fields
+        check_in_date=check_in,
+        check_out_date=check_out,
+        hotel_itemization=hotel_items,
+        # Flight fields
+        airline=extracted.get("airline"),
+        flight_number=extracted.get("flight_number"),
+        departure_city=extracted.get("departure_city"),
+        arrival_city=extracted.get("arrival_city"),
+        passenger_name=extracted.get("passenger_name"),
+        booking_reference=extracted.get("booking_reference"),
+        # Metadata
+        confidence_score=confidence_score,
+        requires_companion=extracted.get("requires_companion", False),
+        requires_itemization=extracted.get("requires_itemization", False),
+    )
+
+
 def build_expense_output(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
-    """Build the final ExtractedExpense output."""
+    """Build the final ExtractedExpense output(s) for all receipts."""
     if state.get("error"):
         return state
 
-    extracted = state.get("extracted_data", {})
-    category = state.get("category", "other")
-
     try:
-        # Parse dates using safe_date helper
-        expense_date = safe_date(extracted.get("expense_date"), date.today())
+        confidence_score = state.get("confidence_score", 0.8)
+        expenses = []
 
-        # Build hotel itemization if present
-        hotel_items = None
-        if state.get("hotel_itemization"):
-            hotel_items = []
-            for item in state["hotel_itemization"]:
-                # Use expense_date as default for night_date if not available
-                night_date = safe_date(item.get("night_date"), expense_date)
+        # Process multiple receipts if available
+        receipts = state.get("extracted_receipts", [])
+        if not receipts:
+            # Fall back to single extracted_data for backward compatibility
+            extracted = state.get("extracted_data", {})
+            if extracted:
+                receipts = [extracted]
 
-                hotel_items.append(
-                    HotelNightItem(
-                        night_date=night_date,
-                        room_rate=safe_decimal(item.get("room_rate")),
-                        room_tax=safe_decimal(item.get("room_tax")),
-                        service_charge=safe_decimal(item.get("service_charge")),
-                        resort_fee=safe_decimal(item.get("resort_fee")),
-                        parking_fee=safe_decimal(item.get("parking_fee")),
-                        other_fees=safe_decimal(item.get("other_fees")),
-                    )
-                )
+        for idx, extracted in enumerate(receipts):
+            # For first receipt, use state-level hotel itemization if available
+            # (from itemize_hotel step)
+            hotel_itemization = state.get("hotel_itemization") if idx == 0 else None
 
-        # Parse check-in/check-out dates for hotels using safe_date
-        check_in = None
-        check_out = None
-        if category == "hotel":
-            if extracted.get("check_in_date"):
-                check_in = safe_date(extracted["check_in_date"])
-            if extracted.get("check_out_date"):
-                check_out = safe_date(extracted["check_out_date"])
+            expense = build_single_expense(extracted, hotel_itemization, confidence_score)
+            expenses.append(expense)
 
-        # Parse currency conversion dates using safe_date
-        exchange_rate_date = None
-        if extracted.get("exchange_rate_date"):
-            exchange_rate_date = safe_date(extracted["exchange_rate_date"], date.today())
-
-        # Get subtotal, defaulting to total if not provided
-        subtotal_val = extracted.get("subtotal")
-        if subtotal_val is None:
-            subtotal_val = extracted.get("total", 0)
-
-        expense = ExtractedExpense(
-            vendor=extracted.get("vendor", "Unknown"),
-            category=ExpenseCategory(category),
-            expense_date=expense_date,
-            description=extracted.get("description"),
-            subtotal=safe_decimal(subtotal_val),
-            tax=safe_decimal(extracted.get("tax")),
-            total=safe_decimal(extracted.get("total")),
-            currency=extracted.get("currency", "USD"),
-            # Currency conversion fields
-            original_currency=extracted.get("original_currency"),
-            original_amount=safe_decimal(extracted.get("original_amount")) if extracted.get("original_amount") is not None else None,
-            exchange_rate=safe_decimal(extracted.get("exchange_rate")) if extracted.get("exchange_rate") is not None else None,
-            exchange_rate_source=extracted.get("exchange_rate_source"),
-            exchange_rate_date=exchange_rate_date,
-            # Receipt info
-            receipt_number=extracted.get("receipt_number"),
-            payment_method=extracted.get("payment_method"),
-            # Hotel fields
-            check_in_date=check_in,
-            check_out_date=check_out,
-            hotel_itemization=hotel_items,
-            # Flight fields
-            airline=extracted.get("airline"),
-            flight_number=extracted.get("flight_number"),
-            departure_city=extracted.get("departure_city"),
-            arrival_city=extracted.get("arrival_city"),
-            passenger_name=extracted.get("passenger_name"),
-            booking_reference=extracted.get("booking_reference"),
-            # Metadata
-            confidence_score=state.get("confidence_score", 0.8),
-            requires_companion=extracted.get("requires_companion", False),
-            requires_itemization=extracted.get("requires_itemization", False),
-        )
-
-        state["expense"] = expense
+        # Set both single expense (for backward compatibility) and expenses list
+        state["expenses"] = expenses
+        state["expense"] = expenses[0] if expenses else None
         state["processing_stage"] = "complete"
 
     except Exception as e:

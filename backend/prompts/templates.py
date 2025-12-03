@@ -2,7 +2,12 @@
 
 RECEIPT_EXTRACTION_PROMPT = """You are an expert expense receipt parser. Analyze the provided receipt image, PDF, or text and extract all relevant expense information.
 
-Extract the following fields:
+IMPORTANT: A single document may contain MULTIPLE receipts (e.g., 2 taxi receipts on one page, multiple meal receipts scanned together).
+- Carefully examine the ENTIRE document for multiple receipts
+- If you detect multiple separate receipts (different vendors, different dates, different receipt numbers), extract EACH as a separate expense
+- Return an array of expenses, even if there's only one receipt
+
+For EACH receipt found, extract the following fields:
 1. **vendor**: The merchant/vendor name (e.g., "Marriott Hotels", "Uber", "Batik Air", "AirAsia", "Malaysia Airlines", "Hilton Singapore", "Grand Hyatt Kuala Lumpur")
 2. **category**: One of: taxi, rideshare, hotel, flight, meal, parking, toll, public_transport, car_rental, fuel, conference, office_supplies, other
 3. **expense_date**: The date of the transaction (YYYY-MM-DD format). For flights, use the departure date. For hotels, use the check-in date.
@@ -37,6 +42,13 @@ HOTEL NAME DETECTION TIPS:
 For MEAL receipts:
 - Note if the total exceeds $25 (requires companion information for compliance)
 
+DETECTING MULTIPLE RECEIPTS:
+- Look for visual separations (lines, gaps, different headers)
+- Different receipt numbers indicate separate receipts
+- Different dates or vendors indicate separate receipts
+- Multiple taxi/cab receipts are common on a single scanned page
+- Each distinct transaction should be a separate expense entry
+
 CRITICAL CURRENCY DETECTION (DO NOT DEFAULT TO USD):
 - Look for currency symbols: RM (MYR), S$ (SGD), ฿ (THB), $ (could be USD, SGD, AUD), € (EUR), £ (GBP)
 - Look for explicit currency codes: MYR, SGD, USD, EUR, IDR, THB, etc.
@@ -54,7 +66,17 @@ AIRLINE-BASED CURRENCY INFERENCE (if no explicit currency symbol found):
 
 IMPORTANT: Batik Air is a Malaysian/Indonesian airline. If the ticket shows Batik Air, the currency is most likely MYR (Malaysian Ringgit) or IDR (Indonesian Rupiah). Look carefully for "RM" or amounts in the 1000+ range which indicates MYR
 
-Return your response as a valid JSON object with these fields. Use null for fields you cannot determine.
+RESPONSE FORMAT:
+Return your response as a valid JSON object with this structure:
+{{
+  "receipts": [
+    {{ ... first receipt fields ... }},
+    {{ ... second receipt fields (if any) ... }}
+  ],
+  "receipt_count": <number of receipts found>
+}}
+
+Use null for fields you cannot determine.
 Be precise with numbers - extract exact amounts shown on the receipt.
 
 Receipt content to analyze:
