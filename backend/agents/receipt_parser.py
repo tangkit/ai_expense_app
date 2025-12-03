@@ -44,9 +44,11 @@ class ReceiptParserAgent:
             "file_name": file_name,
             "raw_text": None,
             "extracted_data": None,
+            "extracted_receipts": None,
             "category": None,
             "hotel_itemization": None,
             "expense": None,
+            "expenses": None,
             "validation_errors": [],
             "validation_warnings": [],
             "confidence_score": 0.0,
@@ -64,14 +66,24 @@ class ReceiptParserAgent:
                 return ExpenseParseResponse(
                     success=False,
                     expense=None,
+                    expenses=[],
                     raw_text=final_state.get("raw_text"),
                     error_message=final_state["error"],
                     processing_time_ms=processing_time,
                 )
 
+            # Get expenses list (new) and single expense (backward compatibility)
+            expenses = final_state.get("expenses", [])
+            expense = final_state.get("expense")
+
+            # Ensure backward compatibility - if expenses list exists but expense is None
+            if expenses and not expense:
+                expense = expenses[0]
+
             return ExpenseParseResponse(
                 success=True,
-                expense=final_state.get("expense"),
+                expense=expense,
+                expenses=expenses,
                 raw_text=final_state.get("raw_text"),
                 error_message=None,
                 processing_time_ms=processing_time,
@@ -82,6 +94,7 @@ class ReceiptParserAgent:
             return ExpenseParseResponse(
                 success=False,
                 expense=None,
+                expenses=[],
                 raw_text=None,
                 error_message=f"Workflow execution failed: {str(e)}",
                 processing_time_ms=processing_time,

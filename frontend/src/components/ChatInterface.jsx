@@ -226,15 +226,7 @@ Please make sure it's a valid Excel (.xls, .xlsx) or CSV file.`);
           uploadedAt: new Date().toISOString()
         });
 
-        const parsedData = await parseReceipt(file);
-
-        // Show what was extracted
-        let extractionMessage = `**Extraction Complete!** (${Math.round(parsedData.confidence * 100)}% confidence)
-
-**Detected Information:**
-• Vendor: ${parsedData.extracted.vendor}
-• Category: ${parsedData.extracted.category}
-• Date: ${parsedData.extracted.date}`;
+        const parsedExpenses = await parseReceipt(file);
 
         // Get currency symbol helper
         const getCurrencySymbol = (currencyCode) => {
@@ -250,6 +242,45 @@ Please make sure it's a valid Excel (.xls, .xlsx) or CSV file.`);
           };
           return symbols[currencyCode] || currencyCode + ' ';
         };
+
+        // Handle multiple receipts detected in single document
+        if (parsedExpenses.length > 1) {
+          let multiReceiptMessage = `**Multiple Receipts Detected!** Found ${parsedExpenses.length} separate receipts in this document.\n`;
+
+          parsedExpenses.forEach((parsedData, idx) => {
+            const currency = parsedData.extracted.currency || 'USD';
+            const currencySymbol = getCurrencySymbol(currency);
+            multiReceiptMessage += `
+**Receipt ${idx + 1}:**
+• Vendor: ${parsedData.extracted.vendor}
+• Category: ${parsedData.extracted.category}
+• Total: ${currencySymbol}${parsedData.extracted.total.toFixed(2)} ${currency}`;
+          });
+
+          multiReceiptMessage += `
+
+I'll show you each receipt one at a time for review. Starting with the first one...`;
+
+          addBotMessage(multiReceiptMessage);
+
+          // Store remaining expenses to process after first one is saved
+          window.__pendingExpenses = parsedExpenses.slice(1);
+        }
+
+        // Process first (or only) expense
+        const parsedData = parsedExpenses[0];
+
+        // Show what was extracted
+        let extractionMessage = parsedExpenses.length > 1
+          ? `**Receipt 1 of ${parsedExpenses.length}** (${Math.round(parsedData.confidence * 100)}% confidence)`
+          : `**Extraction Complete!** (${Math.round(parsedData.confidence * 100)}% confidence)`;
+
+        extractionMessage += `
+
+**Detected Information:**
+• Vendor: ${parsedData.extracted.vendor}
+• Category: ${parsedData.extracted.category}
+• Date: ${parsedData.extracted.date}`;
 
         // Show currency conversion info if applicable
         if (parsedData.currencyConversion) {
@@ -343,18 +374,108 @@ Please review and edit the details below, then click "Save Expense" to add it to
       'USD': '$'
     };
     const currSymbol = symbols[expense.currency] || expense.currency + ' ';
-    addBotMessage(`✅ Expense saved successfully!
+
+    // Check if there are more pending expenses from multi-receipt document
+    const pendingExpenses = window.__pendingExpenses || [];
+
+    if (pendingExpenses.length > 0) {
+      // Process next pending expense
+      const nextParsedData = pendingExpenses.shift();
+      window.__pendingExpenses = pendingExpenses;
+
+      const remainingCount = pendingExpenses.length;
+      const nextCurrency = nextParsedData.extracted.currency || 'USD';
+      const nextCurrSymbol = symbols[nextCurrency] || nextCurrency + ' ';
+
+      addBotMessage(`✅ Expense saved successfully!
+
+**${expense.vendor}** - ${currSymbol}${expense.total.toFixed(2)} ${expense.currency}
+
+Now showing the next receipt (${remainingCount + 1} remaining)...
+
+**Detected Information:**
+• Vendor: ${nextParsedData.extracted.vendor}
+• Category: ${nextParsedData.extracted.category}
+• Date: ${nextParsedData.extracted.date}
+• **Total: ${nextCurrSymbol}${nextParsedData.extracted.total.toFixed(2)} ${nextCurrency}**
+
+Please review and edit the details below, then click "Save Expense" to add it to your report.`);
+
+      // Set next expense for editing
+      setCurrentExpense({
+        ...nextParsedData.extracted,
+        id: nextParsedData.id,
+        hotelItemization: nextParsedData.hotelItemization,
+        requiresCompanion: nextParsedData.requiresCompanion,
+        confidence: nextParsedData.confidence,
+        fileName: nextParsedData.fileName,
+        receiptId: Date.now().toString(),
+        currencyConversion: nextParsedData.currencyConversion,
+        flightInfo: nextParsedData.flightInfo
+      });
+    } else {
+      addBotMessage(`✅ Expense saved successfully!
 
 **${expense.vendor}** - ${currSymbol}${expense.total.toFixed(2)} ${expense.currency}
 Category: ${expense.category}
 ${claimInfo.claimName ? `\nAdded to: ${claimInfo.claimName}` : ''}
 
 The expense has been added to your report. Upload another receipt or type "export" when you're ready to generate your report.`);
+    }
   };
 
   const handleExpenseCancel = () => {
     clearCurrentExpense();
-    addBotMessage(`No problem! The expense was not saved. Feel free to upload another receipt when you're ready.`);
+
+    // Get currency symbol for display
+    const symbols = {
+      'MYR': 'RM ',
+      'SGD': 'S$',
+      'EUR': '€',
+      'GBP': '£',
+      'THB': '฿',
+      'IDR': 'Rp ',
+      'JPY': '¥',
+      'USD': '$'
+    };
+
+    // Check if there are more pending expenses from multi-receipt document
+    const pendingExpenses = window.__pendingExpenses || [];
+
+    if (pendingExpenses.length > 0) {
+      // Process next pending expense
+      const nextParsedData = pendingExpenses.shift();
+      window.__pendingExpenses = pendingExpenses;
+
+      const remainingCount = pendingExpenses.length;
+      const nextCurrency = nextParsedData.extracted.currency || 'USD';
+      const nextCurrSymbol = symbols[nextCurrency] || nextCurrency + ' ';
+
+      addBotMessage(`Expense skipped. Moving to the next receipt (${remainingCount + 1} remaining)...
+
+**Detected Information:**
+• Vendor: ${nextParsedData.extracted.vendor}
+• Category: ${nextParsedData.extracted.category}
+• Date: ${nextParsedData.extracted.date}
+• **Total: ${nextCurrSymbol}${nextParsedData.extracted.total.toFixed(2)} ${nextCurrency}**
+
+Please review and edit the details below, then click "Save Expense" to add it to your report.`);
+
+      // Set next expense for editing
+      setCurrentExpense({
+        ...nextParsedData.extracted,
+        id: nextParsedData.id,
+        hotelItemization: nextParsedData.hotelItemization,
+        requiresCompanion: nextParsedData.requiresCompanion,
+        confidence: nextParsedData.confidence,
+        fileName: nextParsedData.fileName,
+        receiptId: Date.now().toString(),
+        currencyConversion: nextParsedData.currencyConversion,
+        flightInfo: nextParsedData.flightInfo
+      });
+    } else {
+      addBotMessage(`No problem! The expense was not saved. Feel free to upload another receipt when you're ready.`);
+    }
   };
 
   const handleClaimInfoSave = () => {

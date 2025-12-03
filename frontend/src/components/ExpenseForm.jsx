@@ -275,7 +275,11 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
           </div>
 
           <div className="form-group">
-            <label htmlFor="receiptNumber">Receipt/Invoice #</label>
+            <label htmlFor="receiptNumber">
+              {formData.category === EXPENSE_CATEGORIES.FLIGHT ? 'Booking#' :
+               formData.category === EXPENSE_CATEGORIES.HOTEL ? 'Reservation#' :
+               'Receipt/Invoice #'}
+            </label>
             <input
               type="text"
               id="receiptNumber"
