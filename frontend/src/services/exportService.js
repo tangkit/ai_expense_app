@@ -275,7 +275,7 @@ async function getExchangeRate(sourceCurrency) {
 
   try {
     // Try to fetch from Alpha Vantage API
-    const apiKey = 'demo'; // Replace with actual API key or use MCP
+    const apiKey = import.meta.env.VITE_ALPHAVANTAGE_API_KEY || 'demo';
     const url = `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=${sourceCurrency}&to_currency=SGD&apikey=${apiKey}`;
 
     const response = await fetch(url);
