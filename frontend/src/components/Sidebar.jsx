@@ -50,7 +50,7 @@ export default function Sidebar() {
       return 0;
     });
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     if (expenses.length === 0) {
       addBotMessage('No expenses to export. Please add some receipts first!');
       return;
@@ -65,16 +65,21 @@ export default function Sidebar() {
       addBotMessage(`⚠️ **Warning:** Some expenses need attention before export:\n\n${issues}\n\nThe export will proceed, but please review these items.`);
     }
 
-    const filename = exportToExcel(expenses, 'expense_report', claimInfo, companyTemplate);
+    try {
+      const filename = await exportToExcel(expenses, 'expense_report', claimInfo, companyTemplate);
 
-    let templateNote = '';
-    if (companyTemplate && companyTemplate.fileContent) {
-      templateNote = `\n\n*✅ Populated your original company template: ${companyTemplate.name}*`;
-    } else if (companyTemplate) {
-      templateNote = `\n\n*⚠️ Using template column structure only. Please re-upload your template for direct population.*`;
+      let templateNote = '';
+      if (companyTemplate && companyTemplate.fileContent) {
+        templateNote = `\n\n*✅ Populated your original company template with ExcelJS (full style preservation): ${companyTemplate.name}*`;
+      } else if (companyTemplate) {
+        templateNote = `\n\n*⚠️ Using template column structure only. Please re-upload your template for direct population.*`;
+      }
+
+      addBotMessage(`✅ Expense report exported successfully!\n\nFile: **${filename}**\n\nThe spreadsheet includes:\n• ${expenses.length} expense(s)${templateNote}`);
+    } catch (error) {
+      console.error('Export failed:', error);
+      addBotMessage(`❌ Export failed: ${error.message}`);
     }
-
-    addBotMessage(`✅ Expense report exported successfully!\n\nFile: **${filename}**\n\nThe spreadsheet includes:\n• ${expenses.length} expense(s)${templateNote}`);
   };
 
   const handleExportCSV = () => {
