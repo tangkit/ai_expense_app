@@ -990,12 +990,16 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
           console.log(`Conversion Rate column "${colName}" detected, value:`, value);
         }
       }
-      // Special handling for Amount (Reimbursed) - show SGD converted amount
+      // Special handling for Amount (Reimbursed) - show SGD converted amount as numeric with currency format
       else if (normalizedColName.includes('amount') && normalizedColName.includes('reimburs')) {
         const localAmount = expense.amount || expense.total || 0;
         // If already SGD, use the same value; otherwise convert
         const reimbursedAmount = isSGD ? localAmount : (localAmount * exchangeRate);
-        value = formatCurrencyValue(reimbursedAmount, 'SGD');
+        // Set as numeric value (not string) so Excel can sum it
+        cell.value = roundTo2Decimals(reimbursedAmount);
+        // Apply SGD currency number format
+        cell.numFmt = '"SGD "#,##0.00';
+        value = null; // Skip the default value assignment below
       }
 
       // Set cell value
@@ -1014,12 +1018,11 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
           indent: 1
         };
       }
-      // Amount (Reimbursed) column - left align with indent
+      // Amount (Reimbursed) column - right align for numbers
       else if (normalizedColName.includes('amount') && normalizedColName.includes('reimburs')) {
         cell.alignment = {
           ...existingAlignment,
-          horizontal: 'left',
-          indent: 1
+          horizontal: 'right'
         };
       }
       // Date, Expense Type, Amount (Local) columns - add indent
@@ -1075,9 +1078,12 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
     // Populate the TOTAL row cell for Amount (Reimbursed)
     if (amountReimbursedColIndex >= 0) {
       const totalReimbursedCell = worksheet.getCell(totalRowIndex, amountReimbursedColIndex);
-      // Format as SGD (official currency code for Singapore Dollars)
-      totalReimbursedCell.value = formatCurrencyValue(sumReimbursed, 'SGD');
-      console.log(`Set TOTAL Amount (Reimbursed) cell to: ${totalReimbursedCell.value}`);
+      // Set as numeric value with SGD currency format (so Excel can verify the sum)
+      totalReimbursedCell.value = sumReimbursed;
+      totalReimbursedCell.numFmt = '"SGD "#,##0.00';
+      // Right align for numbers
+      totalReimbursedCell.alignment = { horizontal: 'right' };
+      console.log(`Set TOTAL Amount (Reimbursed) cell to: ${sumReimbursed} (with SGD format)`);
     }
   }
 
