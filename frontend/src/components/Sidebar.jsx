@@ -65,8 +65,9 @@ export default function Sidebar() {
       addBotMessage(`⚠️ **Warning:** Some expenses need attention before export:\n\n${issues}\n\nThe export will proceed, but please review these items.`);
     }
 
-    const filename = exportToExcel(expenses, 'expense_report', claimInfo);
-    addBotMessage(`✅ Expense report exported successfully!\n\nFile: **${filename}**\n\nThe spreadsheet includes:\n• Summary sheet with all ${expenses.length} expenses\n• Hotel itemization details (if applicable)\n• Meal companion information (if applicable)`);
+    const filename = exportToExcel(expenses, 'expense_report', claimInfo, companyTemplate);
+    const templateNote = companyTemplate ? `\n*Exported using your company template: ${companyTemplate.name}*` : '';
+    addBotMessage(`✅ Expense report exported successfully!\n\nFile: **${filename}**\n\nThe spreadsheet includes:\n• Summary sheet with all ${expenses.length} expenses\n• Hotel itemization details (if applicable)\n• Meal companion information (if applicable)${templateNote}`);
   };
 
   const handleExportCSV = () => {

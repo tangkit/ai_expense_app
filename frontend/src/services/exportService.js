@@ -8,16 +8,238 @@ import {
 } from '../constants/expenseTypes';
 
 /**
+ * Map common column name variations to expense field names
+ */
+const COLUMN_MAPPINGS = {
+  // Date variations
+  'date': 'date',
+  'expense date': 'date',
+  'transaction date': 'date',
+  'receipt date': 'date',
+  'expense_date': 'date',
+
+  // Category variations
+  'category': 'category',
+  'expense type': 'category',
+  'type': 'category',
+  'expense category': 'category',
+
+  // Vendor variations
+  'vendor': 'vendor',
+  'merchant': 'vendor',
+  'payee': 'vendor',
+  'supplier': 'vendor',
+  'merchant name': 'vendor',
+  'vendor name': 'vendor',
+
+  // Description variations
+  'description': 'description',
+  'details': 'description',
+  'memo': 'description',
+  'notes': 'notes',
+  'remarks': 'notes',
+  'comments': 'notes',
+
+  // Amount variations
+  'amount': 'amount',
+  'subtotal': 'amount',
+  'net amount': 'amount',
+  'expense amount': 'amount',
+
+  // Tax variations
+  'tax': 'tax',
+  'gst': 'tax',
+  'vat': 'tax',
+  'tax amount': 'tax',
+  'sales tax': 'tax',
+  'sst': 'tax',
+
+  // Total variations
+  'total': 'total',
+  'total amount': 'total',
+  'grand total': 'total',
+  'gross amount': 'total',
+
+  // Currency variations
+  'currency': 'currency',
+  'ccy': 'currency',
+  'curr': 'currency',
+  'currency code': 'currency',
+
+  // Payment method variations
+  'payment method': 'paymentMethod',
+  'payment type': 'paymentMethod',
+  'payment': 'paymentMethod',
+  'paid by': 'paymentMethod',
+  'payment mode': 'paymentMethod',
+
+  // Receipt number variations
+  'receipt number': 'receiptNumber',
+  'receipt no': 'receiptNumber',
+  'receipt #': 'receiptNumber',
+  'invoice number': 'receiptNumber',
+  'invoice no': 'receiptNumber',
+  'invoice #': 'receiptNumber',
+  'reference': 'receiptNumber',
+  'ref no': 'receiptNumber',
+  'booking#': 'receiptNumber',
+  'reservation#': 'receiptNumber',
+
+  // Companion/attendee variations
+  'companion': 'companionName',
+  'companion name': 'companionName',
+  'attendee': 'companionName',
+  'attendees': 'companionName',
+  'guest': 'companionName',
+  'guest name': 'companionName',
+  'customer name': 'companionName',
+
+  // Business purpose variations
+  'business purpose': 'businessPurpose',
+  'purpose': 'businessPurpose',
+  'reason': 'businessPurpose',
+  'justification': 'businessPurpose',
+
+  // Project code variations
+  'project code': 'projectCode',
+  'project': 'projectCode',
+  'cost center': 'projectCode',
+  'cost centre': 'projectCode',
+  'department': 'department',
+  'dept': 'department',
+
+  // Location variations
+  'location': 'location',
+  'city': 'location',
+  'place': 'location',
+
+  // Flight specific
+  'airline': 'airline',
+  'flight number': 'flightNumber',
+  'flight no': 'flightNumber',
+  'flight': 'flightNumber',
+  'departure': 'departureCity',
+  'departure city': 'departureCity',
+  'from': 'departureCity',
+  'arrival': 'arrivalCity',
+  'arrival city': 'arrivalCity',
+  'to': 'arrivalCity',
+  'destination': 'arrivalCity',
+  'passenger': 'passengerName',
+  'passenger name': 'passengerName',
+  'traveler': 'passengerName',
+  'traveller': 'passengerName',
+
+  // Hotel specific
+  'hotel': 'vendor',
+  'hotel name': 'vendor',
+  'check in': 'checkInDate',
+  'check-in': 'checkInDate',
+  'check in date': 'checkInDate',
+  'check out': 'checkOutDate',
+  'check-out': 'checkOutDate',
+  'check out date': 'checkOutDate',
+  'nights': 'nights',
+  'no of nights': 'nights',
+};
+
+/**
+ * Get expense value for a given template column
+ */
+function getExpenseValueForColumn(expense, columnName) {
+  const normalizedColumn = columnName.toLowerCase().trim();
+  const fieldName = COLUMN_MAPPINGS[normalizedColumn];
+
+  if (!fieldName) {
+    // Try partial matching for columns not in mappings
+    for (const [pattern, field] of Object.entries(COLUMN_MAPPINGS)) {
+      if (normalizedColumn.includes(pattern) || pattern.includes(normalizedColumn)) {
+        return getFieldValue(expense, field);
+      }
+    }
+    return '';
+  }
+
+  return getFieldValue(expense, fieldName);
+}
+
+/**
+ * Get field value from expense object
+ */
+function getFieldValue(expense, fieldName) {
+  switch (fieldName) {
+    case 'date':
+      return expense.date || '';
+    case 'category':
+      return EXPENSE_CATEGORY_LABELS[expense.category] || expense.category || '';
+    case 'vendor':
+      return expense.vendor || '';
+    case 'description':
+      return expense.description || '';
+    case 'amount':
+      return expense.amount || expense.subtotal || 0;
+    case 'tax':
+      return expense.tax || 0;
+    case 'total':
+      return expense.total || 0;
+    case 'currency':
+      return expense.currency || 'USD';
+    case 'paymentMethod':
+      return expense.paymentMethod || '';
+    case 'receiptNumber':
+      return expense.receiptNumber || '';
+    case 'companionName':
+      return expense.companionName || '';
+    case 'businessPurpose':
+      return expense.businessPurpose || '';
+    case 'projectCode':
+      return expense.projectCode || '';
+    case 'department':
+      return expense.department || '';
+    case 'notes':
+      return expense.notes || '';
+    case 'airline':
+      return expense.airline || '';
+    case 'flightNumber':
+      return expense.flightNumber || '';
+    case 'departureCity':
+      return expense.departureCity || '';
+    case 'arrivalCity':
+      return expense.arrivalCity || '';
+    case 'passengerName':
+      return expense.passengerName || '';
+    case 'checkInDate':
+      return expense.checkInDate || '';
+    case 'checkOutDate':
+      return expense.checkOutDate || '';
+    case 'nights':
+      return expense.hotelItemization?.length || '';
+    case 'location':
+      return expense.location || expense.arrivalCity || '';
+    default:
+      return expense[fieldName] || '';
+  }
+}
+
+/**
  * Export expenses to Excel spreadsheet matching company template
  */
-export function exportToExcel(expenses, filename = 'expense_report') {
+export function exportToExcel(expenses, filename = 'expense_report', claimInfo = null, companyTemplate = null) {
   const workbook = XLSX.utils.book_new();
 
-  // Main expense summary sheet
-  const summaryData = createSummarySheet(expenses);
-  const summarySheet = XLSX.utils.json_to_sheet(summaryData);
-  styleSheet(summarySheet, summaryData);
-  XLSX.utils.book_append_sheet(workbook, summarySheet, 'Expense Summary');
+  // If company template exists, use its column structure
+  if (companyTemplate && companyTemplate.columns && companyTemplate.columns.length > 0) {
+    const templateData = createTemplateBasedSheet(expenses, companyTemplate);
+    const templateSheet = XLSX.utils.json_to_sheet(templateData, { header: companyTemplate.columns });
+    styleSheet(templateSheet, templateData);
+    XLSX.utils.book_append_sheet(workbook, templateSheet, 'Expense Report');
+  } else {
+    // Main expense summary sheet (default format)
+    const summaryData = createSummarySheet(expenses);
+    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+    styleSheet(summarySheet, summaryData);
+    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Expense Summary');
+  }
 
   // Hotel itemization sheet (if any hotel expenses)
   const hotelExpenses = expenses.filter(e => e.category === EXPENSE_CATEGORIES.HOTEL);
@@ -47,6 +269,19 @@ export function exportToExcel(expenses, filename = 'expense_report') {
   XLSX.writeFile(workbook, fullFilename);
 
   return fullFilename;
+}
+
+/**
+ * Create sheet data based on company template columns
+ */
+function createTemplateBasedSheet(expenses, template) {
+  return expenses.map((expense) => {
+    const row = {};
+    template.columns.forEach(column => {
+      row[column] = getExpenseValueForColumn(expense, column);
+    });
+    return row;
+  });
 }
 
 /**
