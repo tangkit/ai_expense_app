@@ -31,7 +31,14 @@ For HOTEL receipts, also extract:
 - **vendor**: The FULL HOTEL NAME (e.g., "Grand Hyatt Singapore", "Marriott Kuala Lumpur", "Holiday Inn Express", "The Ritz-Carlton"). Look for the hotel name in the header, letterhead, or title of the receipt.
 - **check_in_date**: Check-in date (YYYY-MM-DD format)
 - **check_out_date**: Check-out date (YYYY-MM-DD format)
-- **hotel_nights**: List of nightly charges with room_rate, room_tax, service_charge, resort_fee, parking_fee, other_fees for each night
+- **hotel_nights**: List of nightly charges. For EACH night, include:
+  - **night_date**: The date for that specific night (YYYY-MM-DD format, starting from check_in_date and incrementing)
+  - **room_rate**: Base room rate
+  - **room_tax**: Room/occupancy tax
+  - **service_charge**: Service charges
+  - **resort_fee**: Resort/amenity fees
+  - **parking_fee**: Parking charges
+  - **other_fees**: Any other fees
 
 HOTEL NAME DETECTION TIPS:
 - Look at the TOP of the receipt for the hotel name/logo
