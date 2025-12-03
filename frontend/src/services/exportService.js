@@ -637,6 +637,15 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
         const localAmount = expense.amount || expense.total || 0;
         value = formatCurrencyValue(localAmount, localCurrency);
       }
+      // Special handling for Conversion Rate - show exchange rate if different currencies
+      else if (normalizedColName.includes('conversion') && normalizedColName.includes('rate')) {
+        // Only show rate if local currency is different from SGD
+        if (isSGD) {
+          value = ''; // No conversion needed for SGD
+        } else {
+          value = exchangeRate.toFixed(4); // Show 4 decimal places for rate
+        }
+      }
       // Special handling for Amount (Reimbursed) - show S$ converted amount
       else if (normalizedColName.includes('amount') && normalizedColName.includes('reimburs')) {
         const localAmount = expense.amount || expense.total || 0;
