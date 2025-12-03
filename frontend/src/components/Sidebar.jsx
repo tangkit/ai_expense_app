@@ -66,7 +66,8 @@ export default function Sidebar() {
     }
 
     try {
-      const filename = await exportToExcel(expenses, 'expense_report', claimInfo, companyTemplate);
+      // Pass uploadedReceipts to bundle Excel with receipts PDF in a zip
+      const filename = await exportToExcel(expenses, 'expense_report', claimInfo, companyTemplate, uploadedReceipts);
 
       let templateNote = '';
       if (companyTemplate && companyTemplate.fileContent) {
@@ -75,7 +76,13 @@ export default function Sidebar() {
         templateNote = `\n\n*⚠️ Using template column structure only. Please re-upload your template for direct population.*`;
       }
 
-      addBotMessage(`✅ Expense report exported successfully!\n\nFile: **${filename}**\n\nThe spreadsheet includes:\n• ${expenses.length} expense(s)${templateNote}`);
+      // Check if we exported a zip bundle
+      const isZip = filename.endsWith('.zip');
+      const receiptNote = isZip
+        ? `\n\n*📎 Includes combined receipts PDF (${uploadedReceipts.length} receipt(s))*`
+        : '';
+
+      addBotMessage(`✅ Expense report exported successfully!\n\nFile: **${filename}**\n\nThe ${isZip ? 'zip bundle' : 'spreadsheet'} includes:\n• ${expenses.length} expense(s)${receiptNote}${templateNote}`);
     } catch (error) {
       console.error('Export failed:', error);
       addBotMessage(`❌ Export failed: ${error.message}`);
@@ -88,7 +95,7 @@ export default function Sidebar() {
       return;
     }
 
-    const filename = exportToCSV(expenses, 'expense_report');
+    const filename = exportToCSV(expenses, 'expense_report', claimInfo);
     addBotMessage(`✅ CSV export complete!\n\nFile: **${filename}**`);
   };
 

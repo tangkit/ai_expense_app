@@ -1,5 +1,7 @@
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
+import { jsPDF } from 'jspdf';
 import { format } from 'date-fns';
 import {
   EXPENSE_CATEGORIES,
@@ -7,6 +9,142 @@ import {
   SPREADSHEET_COLUMNS,
   HOTEL_ITEMIZED_COLUMNS
 } from '../constants/expenseTypes';
+
+/**
+ * Sanitize a string for use in filenames
+ */
+function sanitizeFilename(str) {
+  if (!str) return '';
+  return str
+    .trim()
+    .replace(/[^a-zA-Z0-9\s-]/g, '') // Remove special characters
+    .replace(/\s+/g, '_') // Replace spaces with underscores
+    .substring(0, 50); // Limit length
+}
+
+/**
+ * Generate filename with employee name prefix and date stamp
+ */
+function generateFileName(baseName, employeeName, extension) {
+  const dateStr = format(new Date(), 'yyyy-MM-dd');
+  const sanitizedName = sanitizeFilename(employeeName);
+  const prefix = sanitizedName ? `${sanitizedName}_` : '';
+  return `${prefix}${baseName}_${dateStr}.${extension}`;
+}
+
+/**
+ * Create a PDF containing all uploaded receipts
+ */
+async function createReceiptsPDF(uploadedReceipts, employeeName) {
+  if (!uploadedReceipts || uploadedReceipts.length === 0) {
+    return null;
+  }
+
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  let yPosition = margin;
+
+  // Title page
+  doc.setFontSize(24);
+  doc.setTextColor(33, 37, 41);
+  doc.setFont('helvetica', 'bold');
+  doc.text('EXPENSE RECEIPTS', pageWidth / 2, yPosition + 30, { align: 'center' });
+  yPosition += 50;
+
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(71, 85, 105);
+
+  if (employeeName) {
+    doc.text(`Employee: ${employeeName}`, pageWidth / 2, yPosition, { align: 'center' });
+    yPosition += 10;
+  }
+
+  doc.text(`Total Receipts: ${uploadedReceipts.length}`, pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 10;
+  doc.text(`Generated: ${format(new Date(), 'MMMM d, yyyy')}`, pageWidth / 2, yPosition, { align: 'center' });
+
+  // Sort receipts by upload date
+  const sortedReceipts = [...uploadedReceipts].sort(
+    (a, b) => new Date(a.uploadedAt) - new Date(b.uploadedAt)
+  );
+
+  // Add each receipt
+  for (let i = 0; i < sortedReceipts.length; i++) {
+    const receipt = sortedReceipts[i];
+    doc.addPage();
+    yPosition = margin;
+
+    // Receipt header
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(33, 37, 41);
+    doc.text(`Receipt ${i + 1} of ${sortedReceipts.length}`, margin, yPosition);
+    yPosition += 8;
+
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(71, 85, 105);
+    doc.text(`File: ${receipt.fileName}`, margin, yPosition);
+    yPosition += 6;
+
+    doc.setFontSize(9);
+    doc.setTextColor(107, 114, 128);
+    const uploadDate = receipt.uploadedAt ? format(new Date(receipt.uploadedAt), 'MMM d, yyyy h:mm a') : 'Unknown';
+    doc.text(`Uploaded: ${uploadDate}`, margin, yPosition);
+    yPosition += 15;
+
+    // Draw separator line
+    doc.setDrawColor(200, 200, 200);
+    doc.setLineWidth(0.5);
+    doc.line(margin, yPosition, pageWidth - margin, yPosition);
+    yPosition += 10;
+
+    // Try to embed image if it's an image type
+    if (receipt.base64 && (receipt.fileType.startsWith('image/') || receipt.base64.startsWith('data:image'))) {
+      try {
+        const imgWidth = pageWidth - 2 * margin;
+        const maxHeight = pageHeight - yPosition - margin - 20;
+
+        // Add the image (scaled to fit)
+        doc.addImage(receipt.base64, 'JPEG', margin, yPosition, imgWidth, Math.min(maxHeight, 180), undefined, 'MEDIUM');
+      } catch (err) {
+        doc.setFontSize(10);
+        doc.setTextColor(239, 68, 68);
+        doc.text('[Image could not be embedded]', margin, yPosition);
+        console.error('Failed to embed receipt image:', err);
+      }
+    } else {
+      // For PDFs or unsupported formats, show info box
+      doc.setFillColor(248, 250, 252);
+      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 40, 3, 3, 'F');
+      doc.setFontSize(10);
+      doc.setTextColor(71, 85, 105);
+      doc.text(`File Name: ${receipt.fileName}`, margin + 10, yPosition + 15);
+      doc.text(`File Type: ${receipt.fileType}`, margin + 10, yPosition + 28);
+    }
+  }
+
+  // Add page numbers
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(156, 163, 175);
+    doc.text(
+      `Page ${i} of ${totalPages}`,
+      pageWidth / 2,
+      pageHeight - 10,
+      { align: 'center' }
+    );
+  }
+
+  // Return as ArrayBuffer
+  return doc.output('arraybuffer');
+}
 
 /**
  * Map common column name variations to expense field names
@@ -800,44 +938,34 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
 
 /**
  * Export expenses to Excel spreadsheet matching company template
+ * Optionally bundles with receipts PDF in a zip file
  * Now async to support ExcelJS
  */
-export async function exportToExcel(expenses, filename = 'expense_report', claimInfo = null, companyTemplate = null) {
+export async function exportToExcel(expenses, filename = 'expense_report', claimInfo = null, companyTemplate = null, uploadedReceipts = null) {
   console.log('=== exportToExcel called ===');
   console.log('Expenses count:', expenses.length);
   console.log('Company template:', companyTemplate);
   console.log('Has fileContent:', companyTemplate?.fileContent ? 'YES (length: ' + companyTemplate.fileContent.length + ')' : 'NO');
   console.log('Has columns:', companyTemplate?.columns ? 'YES (' + companyTemplate.columns.length + ' columns)' : 'NO');
+  console.log('Uploaded receipts:', uploadedReceipts?.length || 0);
 
-  // Generate filename with date
-  const dateStr = format(new Date(), 'yyyy-MM-dd');
-  let fullFilename;
+  // Get employee name for file naming
+  const employeeName = claimInfo?.employeeName || '';
+
+  // Generate filenames with employee name prefix and date stamp
+  const excelFilename = generateFileName('ExpenseReport', employeeName, 'xlsx');
+  const receiptsFilename = generateFileName('Receipts', employeeName, 'pdf');
+  const zipFilename = generateFileName('ExpenseClaim', employeeName, 'zip');
+
   const usingOriginalTemplate = companyTemplate && companyTemplate.fileContent;
-
-  if (usingOriginalTemplate) {
-    // Use original template name (without extension) + date
-    const templateBaseName = companyTemplate.name.replace(/\.[^/.]+$/, ''); // Remove extension
-    fullFilename = `${templateBaseName}_filled_${dateStr}.xlsx`;
-  } else {
-    fullFilename = `${filename}_${dateStr}.xlsx`;
-  }
+  let excelBuffer = null;
 
   // If company template exists with original file content, use ExcelJS for full style preservation
   if (usingOriginalTemplate && companyTemplate.columns && companyTemplate.columns.length > 0) {
     console.log('>>> Using ExcelJS populateOriginalTemplate - filling original template with full style preservation');
 
     try {
-      const buffer = await populateOriginalTemplateExcelJS(expenses, companyTemplate, claimInfo);
-
-      // Download the file
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = fullFilename;
-      link.click();
-      URL.revokeObjectURL(link.href);
-
-      return fullFilename;
+      excelBuffer = await populateOriginalTemplateExcelJS(expenses, companyTemplate, claimInfo);
     } catch (error) {
       console.error('ExcelJS template population failed:', error);
       console.log('Falling back to xlsx library...');
@@ -846,49 +974,91 @@ export async function exportToExcel(expenses, filename = 'expense_report', claim
   }
 
   // Fallback to xlsx library for non-template exports or if ExcelJS fails
-  let workbook = XLSX.utils.book_new();
+  if (!excelBuffer) {
+    let workbook = XLSX.utils.book_new();
 
-  if (companyTemplate && companyTemplate.columns && companyTemplate.columns.length > 0) {
-    console.log('>>> Using createTemplateBasedSheet - template columns only');
-    const templateData = createTemplateBasedSheet(expenses, companyTemplate);
-    const templateSheet = XLSX.utils.json_to_sheet(templateData, { header: companyTemplate.columns });
-    styleSheet(templateSheet, templateData);
-    XLSX.utils.book_append_sheet(workbook, templateSheet, 'Expense Report');
+    if (companyTemplate && companyTemplate.columns && companyTemplate.columns.length > 0) {
+      console.log('>>> Using createTemplateBasedSheet - template columns only');
+      const templateData = createTemplateBasedSheet(expenses, companyTemplate);
+      const templateSheet = XLSX.utils.json_to_sheet(templateData, { header: companyTemplate.columns });
+      styleSheet(templateSheet, templateData);
+      XLSX.utils.book_append_sheet(workbook, templateSheet, 'Expense Report');
+    } else {
+      console.log('>>> Using default format - no template');
+      const summaryData = createSummarySheet(expenses);
+      const summarySheet = XLSX.utils.json_to_sheet(summaryData);
+      styleSheet(summarySheet, summaryData);
+      XLSX.utils.book_append_sheet(workbook, summarySheet, 'Expense Summary');
+    }
+
+    // Add additional sheets for non-template exports
+    if (!usingOriginalTemplate) {
+      // Hotel itemization sheet (if any hotel expenses)
+      const hotelExpenses = expenses.filter(e => e.category === EXPENSE_CATEGORIES.HOTEL);
+      if (hotelExpenses.length > 0) {
+        const hotelData = createHotelItemizationSheet(hotelExpenses);
+        const hotelSheet = XLSX.utils.json_to_sheet(hotelData);
+        styleSheet(hotelSheet, hotelData);
+        XLSX.utils.book_append_sheet(workbook, hotelSheet, 'Hotel Itemization');
+      }
+
+      // Meals with companions sheet (if any meals over $25)
+      const mealsWithCompanions = expenses.filter(
+        e => e.category === EXPENSE_CATEGORIES.MEAL && e.total > 25
+      );
+      if (mealsWithCompanions.length > 0) {
+        const mealsData = createMealsCompanionSheet(mealsWithCompanions);
+        const mealsSheet = XLSX.utils.json_to_sheet(mealsData);
+        styleSheet(mealsSheet, mealsData);
+        XLSX.utils.book_append_sheet(workbook, mealsSheet, 'Meals Entertainment');
+      }
+    }
+
+    // Get Excel as buffer
+    excelBuffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+  }
+
+  // Check if we should create a zip bundle with receipts
+  const hasReceipts = uploadedReceipts && uploadedReceipts.length > 0;
+
+  if (hasReceipts) {
+    console.log('Creating zip bundle with Excel and receipts PDF...');
+
+    // Create receipts PDF
+    const receiptsPdfBuffer = await createReceiptsPDF(uploadedReceipts, employeeName);
+
+    // Create zip file
+    const zip = new JSZip();
+    zip.file(excelFilename, excelBuffer);
+
+    if (receiptsPdfBuffer) {
+      zip.file(receiptsFilename, receiptsPdfBuffer);
+    }
+
+    // Generate and download zip
+    const zipContent = await zip.generateAsync({ type: 'blob' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(zipContent);
+    link.download = zipFilename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    console.log(`Exported zip bundle: ${zipFilename}`);
+    console.log(`  - ${excelFilename}`);
+    console.log(`  - ${receiptsFilename}`);
+
+    return zipFilename;
   } else {
-    console.log('>>> Using default format - no template');
-    const summaryData = createSummarySheet(expenses);
-    const summarySheet = XLSX.utils.json_to_sheet(summaryData);
-    styleSheet(summarySheet, summaryData);
-    XLSX.utils.book_append_sheet(workbook, summarySheet, 'Expense Summary');
+    // No receipts - just download the Excel file
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = excelFilename;
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    return excelFilename;
   }
-
-  // Add additional sheets for non-template exports
-  if (!usingOriginalTemplate) {
-    // Hotel itemization sheet (if any hotel expenses)
-    const hotelExpenses = expenses.filter(e => e.category === EXPENSE_CATEGORIES.HOTEL);
-    if (hotelExpenses.length > 0) {
-      const hotelData = createHotelItemizationSheet(hotelExpenses);
-      const hotelSheet = XLSX.utils.json_to_sheet(hotelData);
-      styleSheet(hotelSheet, hotelData);
-      XLSX.utils.book_append_sheet(workbook, hotelSheet, 'Hotel Itemization');
-    }
-
-    // Meals with companions sheet (if any meals over $25)
-    const mealsWithCompanions = expenses.filter(
-      e => e.category === EXPENSE_CATEGORIES.MEAL && e.total > 25
-    );
-    if (mealsWithCompanions.length > 0) {
-      const mealsData = createMealsCompanionSheet(mealsWithCompanions);
-      const mealsSheet = XLSX.utils.json_to_sheet(mealsData);
-      styleSheet(mealsSheet, mealsData);
-      XLSX.utils.book_append_sheet(workbook, mealsSheet, 'Meals Entertainment');
-    }
-  }
-
-  // Write and download
-  XLSX.writeFile(workbook, fullFilename);
-
-  return fullFilename;
 }
 
 /**
@@ -1010,13 +1180,14 @@ function styleSheet(worksheet, data) {
 /**
  * Export expenses to CSV format
  */
-export function exportToCSV(expenses, filename = 'expense_report') {
+export function exportToCSV(expenses, filename = 'expense_report', claimInfo = null) {
   const summaryData = createSummarySheet(expenses);
   const worksheet = XLSX.utils.json_to_sheet(summaryData);
   const csv = XLSX.utils.sheet_to_csv(worksheet);
 
-  const dateStr = format(new Date(), 'yyyy-MM-dd');
-  const fullFilename = `${filename}_${dateStr}.csv`;
+  // Use employee name for file naming if available
+  const employeeName = claimInfo?.employeeName || '';
+  const fullFilename = generateFileName('ExpenseReport', employeeName, 'csv');
 
   // Create blob and download
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
