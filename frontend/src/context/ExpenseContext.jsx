@@ -31,6 +31,7 @@ const getInitialState = () => {
   return {
     expenses: persisted?.expenses || [],
     currentExpense: null,
+    pendingExpenses: [], // Multiple expenses awaiting review (from multi-receipt documents)
     messages: persisted?.messages || [],
     isProcessing: false,
     error: null,
@@ -57,6 +58,10 @@ const ACTIONS = {
   REMOVE_EXPENSE: 'REMOVE_EXPENSE',
   SET_CURRENT_EXPENSE: 'SET_CURRENT_EXPENSE',
   CLEAR_CURRENT_EXPENSE: 'CLEAR_CURRENT_EXPENSE',
+  SET_PENDING_EXPENSES: 'SET_PENDING_EXPENSES',
+  UPDATE_PENDING_EXPENSE: 'UPDATE_PENDING_EXPENSE',
+  REMOVE_PENDING_EXPENSE: 'REMOVE_PENDING_EXPENSE',
+  CLEAR_PENDING_EXPENSES: 'CLEAR_PENDING_EXPENSES',
   ADD_MESSAGE: 'ADD_MESSAGE',
   SET_MESSAGES: 'SET_MESSAGES',
   SET_PROCESSING: 'SET_PROCESSING',
@@ -107,6 +112,32 @@ function expenseReducer(state, action) {
       return {
         ...state,
         currentExpense: null
+      };
+
+    case ACTIONS.SET_PENDING_EXPENSES:
+      return {
+        ...state,
+        pendingExpenses: action.payload
+      };
+
+    case ACTIONS.UPDATE_PENDING_EXPENSE:
+      return {
+        ...state,
+        pendingExpenses: state.pendingExpenses.map(exp =>
+          exp.id === action.payload.id ? { ...exp, ...action.payload } : exp
+        )
+      };
+
+    case ACTIONS.REMOVE_PENDING_EXPENSE:
+      return {
+        ...state,
+        pendingExpenses: state.pendingExpenses.filter(exp => exp.id !== action.payload)
+      };
+
+    case ACTIONS.CLEAR_PENDING_EXPENSES:
+      return {
+        ...state,
+        pendingExpenses: []
       };
 
     case ACTIONS.ADD_MESSAGE:
@@ -255,6 +286,22 @@ export function ExpenseProvider({ children }) {
     dispatch({ type: ACTIONS.CLEAR_CURRENT_EXPENSE });
   }, []);
 
+  const setPendingExpenses = useCallback((expenses) => {
+    dispatch({ type: ACTIONS.SET_PENDING_EXPENSES, payload: expenses });
+  }, []);
+
+  const updatePendingExpense = useCallback((id, updates) => {
+    dispatch({ type: ACTIONS.UPDATE_PENDING_EXPENSE, payload: { id, ...updates } });
+  }, []);
+
+  const removePendingExpense = useCallback((id) => {
+    dispatch({ type: ACTIONS.REMOVE_PENDING_EXPENSE, payload: id });
+  }, []);
+
+  const clearPendingExpenses = useCallback(() => {
+    dispatch({ type: ACTIONS.CLEAR_PENDING_EXPENSES });
+  }, []);
+
   const addMessage = useCallback((message) => {
     dispatch({ type: ACTIONS.ADD_MESSAGE, payload: message });
   }, []);
@@ -359,6 +406,10 @@ export function ExpenseProvider({ children }) {
     removeExpense,
     setCurrentExpense,
     clearCurrentExpense,
+    setPendingExpenses,
+    updatePendingExpense,
+    removePendingExpense,
+    clearPendingExpenses,
     addMessage,
     addBotMessage,
     addUserMessage,

@@ -38,6 +38,7 @@ export default function ChatInterface() {
     messages,
     isProcessing,
     currentExpense,
+    pendingExpenses,
     claimInfo,
     companyTemplate,
     isInitialized,
@@ -47,6 +48,8 @@ export default function ChatInterface() {
     setCurrentExpense,
     addExpense,
     clearCurrentExpense,
+    setPendingExpenses,
+    removePendingExpense,
     addUploadedReceipt,
     setCompanyTemplate
   } = useExpense();
@@ -259,12 +262,25 @@ Please make sure it's a valid Excel (.xls, .xlsx) or CSV file.`);
 
           multiReceiptMessage += `
 
-I'll show you each receipt one at a time for review. Starting with the first one...`;
+All receipts are shown below for your review. Edit each one and click "Save Expense" to add them to your report.`;
 
           addBotMessage(multiReceiptMessage);
 
-          // Store remaining expenses to process after first one is saved
-          window.__pendingExpenses = parsedExpenses.slice(1);
+          // Set all parsed expenses as pending (they will all be shown as cards)
+          const allPendingExpenses = parsedExpenses.map(parsedData => ({
+            ...parsedData.extracted,
+            id: parsedData.id,
+            hotelItemization: parsedData.hotelItemization,
+            requiresCompanion: parsedData.requiresCompanion,
+            confidence: parsedData.confidence,
+            fileName: parsedData.fileName,
+            receiptId: Date.now().toString(),
+            currencyConversion: parsedData.currencyConversion,
+            flightInfo: parsedData.flightInfo
+          }));
+          setPendingExpenses(allPendingExpenses);
+          setProcessing(false);
+          return; // Don't set currentExpense, use pendingExpenses instead
         }
 
         // Process first (or only) expense
@@ -375,59 +391,20 @@ Please review and edit the details below, then click "Save Expense" to add it to
     };
     const currSymbol = symbols[expense.currency] || expense.currency + ' ';
 
-    // Check if there are more pending expenses from multi-receipt document
-    const pendingExpenses = window.__pendingExpenses || [];
-
-    if (pendingExpenses.length > 0) {
-      // Process next pending expense
-      const nextParsedData = pendingExpenses.shift();
-      window.__pendingExpenses = pendingExpenses;
-
-      const remainingCount = pendingExpenses.length;
-      const nextCurrency = nextParsedData.extracted.currency || 'USD';
-      const nextCurrSymbol = symbols[nextCurrency] || nextCurrency + ' ';
-
-      addBotMessage(`✅ Expense saved successfully!
-
-**${expense.vendor}** - ${currSymbol}${expense.total.toFixed(2)} ${expense.currency}
-
-Now showing the next receipt (${remainingCount + 1} remaining)...
-
-**Detected Information:**
-• Vendor: ${nextParsedData.extracted.vendor}
-• Category: ${nextParsedData.extracted.category}
-• Date: ${nextParsedData.extracted.date}
-• **Total: ${nextCurrSymbol}${nextParsedData.extracted.total.toFixed(2)} ${nextCurrency}**
-
-Please review and edit the details below, then click "Save Expense" to add it to your report.`);
-
-      // Set next expense for editing
-      setCurrentExpense({
-        ...nextParsedData.extracted,
-        id: nextParsedData.id,
-        hotelItemization: nextParsedData.hotelItemization,
-        requiresCompanion: nextParsedData.requiresCompanion,
-        confidence: nextParsedData.confidence,
-        fileName: nextParsedData.fileName,
-        receiptId: Date.now().toString(),
-        currencyConversion: nextParsedData.currencyConversion,
-        flightInfo: nextParsedData.flightInfo
-      });
-    } else {
-      addBotMessage(`✅ Expense saved successfully!
+    addBotMessage(`✅ Expense saved successfully!
 
 **${expense.vendor}** - ${currSymbol}${expense.total.toFixed(2)} ${expense.currency}
 Category: ${expense.category}
 ${claimInfo.claimName ? `\nAdded to: ${claimInfo.claimName}` : ''}
 
 The expense has been added to your report. Upload another receipt or type "export" when you're ready to generate your report.`);
-    }
   };
 
-  const handleExpenseCancel = () => {
-    clearCurrentExpense();
+  // Handle saving a pending expense from multi-receipt view
+  const handlePendingExpenseSave = (expense) => {
+    addExpense(expense);
+    removePendingExpense(expense.id);
 
-    // Get currency symbol for display
     const symbols = {
       'MYR': 'RM ',
       'SGD': 'S$',
@@ -438,44 +415,35 @@ The expense has been added to your report. Upload another receipt or type "expor
       'JPY': '¥',
       'USD': '$'
     };
+    const currSymbol = symbols[expense.currency] || expense.currency + ' ';
+    const remainingCount = pendingExpenses.length - 1;
 
-    // Check if there are more pending expenses from multi-receipt document
-    const pendingExpenses = window.__pendingExpenses || [];
+    if (remainingCount > 0) {
+      addBotMessage(`✅ Expense saved: **${expense.vendor}** - ${currSymbol}${expense.total.toFixed(2)} ${expense.currency}
 
-    if (pendingExpenses.length > 0) {
-      // Process next pending expense
-      const nextParsedData = pendingExpenses.shift();
-      window.__pendingExpenses = pendingExpenses;
-
-      const remainingCount = pendingExpenses.length;
-      const nextCurrency = nextParsedData.extracted.currency || 'USD';
-      const nextCurrSymbol = symbols[nextCurrency] || nextCurrency + ' ';
-
-      addBotMessage(`Expense skipped. Moving to the next receipt (${remainingCount + 1} remaining)...
-
-**Detected Information:**
-• Vendor: ${nextParsedData.extracted.vendor}
-• Category: ${nextParsedData.extracted.category}
-• Date: ${nextParsedData.extracted.date}
-• **Total: ${nextCurrSymbol}${nextParsedData.extracted.total.toFixed(2)} ${nextCurrency}**
-
-Please review and edit the details below, then click "Save Expense" to add it to your report.`);
-
-      // Set next expense for editing
-      setCurrentExpense({
-        ...nextParsedData.extracted,
-        id: nextParsedData.id,
-        hotelItemization: nextParsedData.hotelItemization,
-        requiresCompanion: nextParsedData.requiresCompanion,
-        confidence: nextParsedData.confidence,
-        fileName: nextParsedData.fileName,
-        receiptId: Date.now().toString(),
-        currencyConversion: nextParsedData.currencyConversion,
-        flightInfo: nextParsedData.flightInfo
-      });
+${remainingCount} receipt(s) remaining for review.`);
     } else {
-      addBotMessage(`No problem! The expense was not saved. Feel free to upload another receipt when you're ready.`);
+      addBotMessage(`✅ All expenses saved! **${expense.vendor}** was the last one.
+
+Your expenses have been added to the report. Upload more receipts or type "export" when ready.`);
     }
+  };
+
+  // Handle canceling a pending expense from multi-receipt view
+  const handlePendingExpenseCancel = (expenseId) => {
+    removePendingExpense(expenseId);
+    const remainingCount = pendingExpenses.length - 1;
+
+    if (remainingCount > 0) {
+      addBotMessage(`Receipt skipped. ${remainingCount} receipt(s) remaining for review.`);
+    } else {
+      addBotMessage(`Receipt skipped. No more pending receipts.`);
+    }
+  };
+
+  const handleExpenseCancel = () => {
+    clearCurrentExpense();
+    addBotMessage(`No problem! The expense was not saved. Feel free to upload another receipt when you're ready.`);
   };
 
   const handleClaimInfoSave = () => {
@@ -543,7 +511,25 @@ I'll use this template structure when exporting your expense report.`);
           </div>
         )}
 
-        {showUpload && !currentExpense && !showClaimInfo && !showTemplateUpload && (
+        {/* Multiple pending expenses from multi-receipt document */}
+        {pendingExpenses && pendingExpenses.length > 0 && (
+          <div className="pending-expenses-container">
+            {pendingExpenses.map((expense, index) => (
+              <div key={expense.id} className="expense-form-container pending-expense">
+                <div className="pending-expense-header">
+                  <span className="receipt-number">Receipt {index + 1} of {pendingExpenses.length}</span>
+                </div>
+                <ExpenseForm
+                  expense={expense}
+                  onSave={handlePendingExpenseSave}
+                  onCancel={() => handlePendingExpenseCancel(expense.id)}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {showUpload && !currentExpense && !showClaimInfo && !showTemplateUpload && pendingExpenses.length === 0 && (
           <div className="upload-container">
             <FileUpload
               onUpload={handleFileUpload}
@@ -560,7 +546,7 @@ I'll use this template structure when exporting your expense report.`);
           type="button"
           className="attach-button"
           onClick={() => setShowUpload(!showUpload)}
-          disabled={isProcessing || currentExpense}
+          disabled={isProcessing || currentExpense || pendingExpenses.length > 0}
           title="Upload receipt"
         >
           <Paperclip size={20} />
