@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { format } from 'date-fns';
 import {
   EXPENSE_CATEGORIES,
@@ -45,6 +46,8 @@ const COLUMN_MAPPINGS = {
   'subtotal': 'amount',
   'net amount': 'amount',
   'expense amount': 'amount',
+  'amount (local)': 'amount',
+  'amount (reimbursed)': 'total',
 
   // Tax variations
   'tax': 'tax',
@@ -222,25 +225,24 @@ function getFieldValue(expense, fieldName) {
 }
 
 /**
- * Find the footer section in the template (signature/approval area)
- * Returns the 0-indexed row where footer starts, or -1 if not found
+ * Find the footer section in the template using ExcelJS worksheet
+ * Returns the 1-indexed row where footer starts, or -1 if not found
  */
-function findFooterSection(worksheet, headerRowIndex, totalRows) {
-  const footerKeywords = ['employee name', 'signature', 'approved by', 'approver', 'authorization', 'verified by'];
+function findFooterSectionExcelJS(worksheet, headerRowIndex, totalRows) {
+  const footerKeywords = ['employee name', 'signature', 'approved by', 'approver', 'authorization', 'verified by', 'total expenses', 'grand total'];
 
-  // Start searching from a few rows after header
-  const searchStart = headerRowIndex + 2;
+  // Start searching from a few rows after header (headerRowIndex is 1-indexed)
+  const searchStart = headerRowIndex + 3;
 
-  for (let row = searchStart; row < totalRows; row++) {
+  for (let row = searchStart; row <= totalRows; row++) {
     // Check cells in this row for footer keywords
-    for (let col = 0; col < 10; col++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-      const cell = worksheet[cellAddress];
-      if (cell && cell.v) {
-        const cellValue = String(cell.v).toLowerCase().trim();
+    for (let col = 1; col <= 10; col++) {
+      const cell = worksheet.getCell(row, col);
+      if (cell && cell.value) {
+        const cellValue = String(cell.value).toLowerCase().trim();
         for (const keyword of footerKeywords) {
           if (cellValue.includes(keyword)) {
-            console.log(`Found footer keyword "${keyword}" at row ${row} (cell ${cellAddress})`);
+            console.log(`Found footer keyword "${keyword}" at row ${row}, col ${col}`);
             return row;
           }
         }
@@ -252,13 +254,13 @@ function findFooterSection(worksheet, headerRowIndex, totalRows) {
 }
 
 /**
- * Populate the original company template with expense data
+ * Populate the original company template with expense data using ExcelJS
  * Preserves original formatting, structure, and footer section
  */
-function populateOriginalTemplate(expenses, companyTemplate) {
-  console.log('=== Populating Original Template ===');
+async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
+  console.log('=== Populating Original Template with ExcelJS ===');
   console.log('Template name:', companyTemplate.name);
-  console.log('Header row index:', companyTemplate.headerRowIndex);
+  console.log('Header row index (0-indexed):', companyTemplate.headerRowIndex);
   console.log('Columns:', companyTemplate.columns);
 
   // Decode base64 content back to ArrayBuffer
@@ -268,30 +270,24 @@ function populateOriginalTemplate(expenses, companyTemplate) {
     bytes[i] = binaryString.charCodeAt(i);
   }
 
-  // Load the original template workbook with all options to preserve styling
-  const workbook = XLSX.read(bytes.buffer, {
-    type: 'array',
-    cellStyles: true,
-    cellNF: true,
-    cellFormula: true
-  });
+  // Load the workbook with ExcelJS
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(bytes.buffer);
 
-  // Get the first sheet
-  const firstSheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[firstSheetName];
+  // Get the first worksheet
+  const worksheet = workbook.worksheets[0];
+  console.log('First sheet name:', worksheet.name);
 
-  console.log('First sheet name:', firstSheetName);
+  // ExcelJS uses 1-indexed rows, so convert headerRowIndex
+  const headerRow = (companyTemplate.headerRowIndex || 0) + 1; // 1-indexed
+  const dataStartRow = headerRow + 1; // Row after header
 
-  // Get the range of the worksheet
-  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-  const totalRows = range.e.r + 1;
-
-  // Determine the header row (0-indexed)
-  const headerRowIndex = companyTemplate.headerRowIndex || 0;
-  const dataStartRow = headerRowIndex + 1; // 0-indexed row for first data entry
+  // Get total rows
+  const totalRows = worksheet.rowCount;
+  console.log('Total rows in template:', totalRows);
 
   // Find footer section to preserve it
-  const footerRowIndex = findFooterSection(worksheet, headerRowIndex, totalRows);
+  const footerRowIndex = findFooterSectionExcelJS(worksheet, headerRow, totalRows);
   console.log('Footer section starts at row:', footerRowIndex >= 0 ? footerRowIndex : 'Not found');
 
   // Calculate available data rows
@@ -307,26 +303,41 @@ function populateOriginalTemplate(expenses, companyTemplate) {
   console.log('Available data rows:', maxDataRows);
   console.log('Expenses to insert:', expenses.length);
 
-  // Get a template cell's style from the first data row (if exists) for each column
-  const templateStyles = {};
-  companyTemplate.columns.forEach((colName, colIndex) => {
-    const templateCellAddress = XLSX.utils.encode_cell({ r: dataStartRow, c: colIndex });
-    const templateCell = worksheet[templateCellAddress];
-    if (templateCell && templateCell.s) {
-      templateStyles[colIndex] = templateCell.s;
+  // Get column mapping from template columns to actual Excel columns
+  // The columns in companyTemplate.columns correspond to non-empty cells in header row
+  const columnIndices = [];
+  const headerRowObj = worksheet.getRow(headerRow);
+
+  // Find the actual column indices for each template column
+  let templateColIndex = 0;
+  headerRowObj.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    const cellValue = cell.value ? String(cell.value).trim() : '';
+    if (cellValue && templateColIndex < companyTemplate.columns.length) {
+      if (cellValue === companyTemplate.columns[templateColIndex]) {
+        columnIndices.push(colNumber);
+        templateColIndex++;
+      }
     }
   });
 
-  // Clear only the data area cells (between header and footer), preserving structure
-  const dataEndRow = footerRowIndex >= 0 ? footerRowIndex - 1 : dataStartRow + maxDataRows;
+  // If we didn't find all columns, fall back to sequential columns starting from column 1
+  if (columnIndices.length !== companyTemplate.columns.length) {
+    console.log('Column mapping incomplete, using sequential columns');
+    columnIndices.length = 0;
+    for (let i = 0; i < companyTemplate.columns.length; i++) {
+      columnIndices.push(i + 1);
+    }
+  }
+
+  console.log('Column indices:', columnIndices);
+
+  // Clear only the data area cells (between header and footer)
+  const dataEndRow = footerRowIndex >= 0 ? footerRowIndex - 2 : dataStartRow + maxDataRows - 1;
   for (let row = dataStartRow; row <= dataEndRow; row++) {
-    for (let col = 0; col < companyTemplate.columns.length; col++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-      // Only clear the value, try to preserve the cell object if it has styling
-      if (worksheet[cellAddress]) {
-        worksheet[cellAddress].v = '';
-        if (worksheet[cellAddress].w) delete worksheet[cellAddress].w; // Clear formatted value
-      }
+    for (const colIndex of columnIndices) {
+      const cell = worksheet.getCell(row, colIndex);
+      // Clear value but preserve style
+      cell.value = null;
     }
   }
 
@@ -338,89 +349,94 @@ function populateOriginalTemplate(expenses, companyTemplate) {
 
   for (let expenseIndex = 0; expenseIndex < rowsToInsert; expenseIndex++) {
     const expense = expenses[expenseIndex];
-    const rowIndex = dataStartRow + expenseIndex; // 0-indexed row
+    const rowIndex = dataStartRow + expenseIndex;
 
-    companyTemplate.columns.forEach((colName, colIndex) => {
-      const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+    companyTemplate.columns.forEach((colName, idx) => {
+      const colIndex = columnIndices[idx];
+      const cell = worksheet.getCell(rowIndex, colIndex);
 
       // Get the value for this column
       const value = getExpenseValueForColumn(expense, colName);
 
-      // Create or update cell, preserving any existing style
-      const existingCell = worksheet[cellAddress] || {};
-      const existingStyle = existingCell.s || templateStyles[colIndex];
-
+      // Set cell value - ExcelJS preserves the cell's existing style
       if (value !== '' && value !== null && value !== undefined) {
-        // Determine cell type
-        if (typeof value === 'number') {
-          worksheet[cellAddress] = {
-            t: 'n',
-            v: value,
-            ...(existingStyle && { s: existingStyle })
-          };
-        } else {
-          worksheet[cellAddress] = {
-            t: 's',
-            v: String(value),
-            ...(existingStyle && { s: existingStyle })
-          };
-        }
-      } else {
-        // Empty cell but preserve style
-        worksheet[cellAddress] = {
-          t: 's',
-          v: '',
-          ...(existingStyle && { s: existingStyle })
-        };
+        cell.value = value;
       }
     });
   }
 
-  // Keep the original worksheet range to preserve footer section
-  console.log('Keeping original worksheet range:', worksheet['!ref']);
-  console.log('Populated', rowsToInsert, 'expense rows starting at row', dataStartRow + 1, '(1-indexed)');
+  console.log('Populated', rowsToInsert, 'expense rows starting at row', dataStartRow);
 
-  return workbook;
+  // Generate the output buffer
+  const buffer = await workbook.xlsx.writeBuffer();
+  return buffer;
 }
 
 /**
  * Export expenses to Excel spreadsheet matching company template
+ * Now async to support ExcelJS
  */
-export function exportToExcel(expenses, filename = 'expense_report', claimInfo = null, companyTemplate = null) {
+export async function exportToExcel(expenses, filename = 'expense_report', claimInfo = null, companyTemplate = null) {
   console.log('=== exportToExcel called ===');
   console.log('Expenses count:', expenses.length);
   console.log('Company template:', companyTemplate);
   console.log('Has fileContent:', companyTemplate?.fileContent ? 'YES (length: ' + companyTemplate.fileContent.length + ')' : 'NO');
   console.log('Has columns:', companyTemplate?.columns ? 'YES (' + companyTemplate.columns.length + ' columns)' : 'NO');
 
-  let workbook;
+  // Generate filename with date
+  const dateStr = format(new Date(), 'yyyy-MM-dd');
+  let fullFilename;
+  const usingOriginalTemplate = companyTemplate && companyTemplate.fileContent;
 
-  // If company template exists with original file content, populate it directly
-  if (companyTemplate && companyTemplate.fileContent && companyTemplate.columns && companyTemplate.columns.length > 0) {
-    console.log('>>> Using populateOriginalTemplate - filling original template directly');
-    workbook = populateOriginalTemplate(expenses, companyTemplate);
-  } else if (companyTemplate && companyTemplate.columns && companyTemplate.columns.length > 0) {
-    console.log('>>> Using createTemplateBasedSheet - template has columns but NO fileContent (need to re-upload template)');
-    // Fallback: use column structure without original file
-    workbook = XLSX.utils.book_new();
+  if (usingOriginalTemplate) {
+    // Use original template name (without extension) + date
+    const templateBaseName = companyTemplate.name.replace(/\.[^/.]+$/, ''); // Remove extension
+    fullFilename = `${templateBaseName}_filled_${dateStr}.xlsx`;
+  } else {
+    fullFilename = `${filename}_${dateStr}.xlsx`;
+  }
+
+  // If company template exists with original file content, use ExcelJS for full style preservation
+  if (usingOriginalTemplate && companyTemplate.columns && companyTemplate.columns.length > 0) {
+    console.log('>>> Using ExcelJS populateOriginalTemplate - filling original template with full style preservation');
+
+    try {
+      const buffer = await populateOriginalTemplateExcelJS(expenses, companyTemplate);
+
+      // Download the file
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fullFilename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+
+      return fullFilename;
+    } catch (error) {
+      console.error('ExcelJS template population failed:', error);
+      console.log('Falling back to xlsx library...');
+      // Fall through to xlsx fallback
+    }
+  }
+
+  // Fallback to xlsx library for non-template exports or if ExcelJS fails
+  let workbook = XLSX.utils.book_new();
+
+  if (companyTemplate && companyTemplate.columns && companyTemplate.columns.length > 0) {
+    console.log('>>> Using createTemplateBasedSheet - template columns only');
     const templateData = createTemplateBasedSheet(expenses, companyTemplate);
     const templateSheet = XLSX.utils.json_to_sheet(templateData, { header: companyTemplate.columns });
     styleSheet(templateSheet, templateData);
     XLSX.utils.book_append_sheet(workbook, templateSheet, 'Expense Report');
   } else {
     console.log('>>> Using default format - no template');
-    // Default: Main expense summary sheet
-    workbook = XLSX.utils.book_new();
     const summaryData = createSummarySheet(expenses);
     const summarySheet = XLSX.utils.json_to_sheet(summaryData);
     styleSheet(summarySheet, summaryData);
     XLSX.utils.book_append_sheet(workbook, summarySheet, 'Expense Summary');
   }
 
-  // Only add additional sheets if NOT using original template directly
-  // (to preserve the original template structure)
-  const usingOriginalTemplate = companyTemplate && companyTemplate.fileContent;
-
+  // Add additional sheets for non-template exports
   if (!usingOriginalTemplate) {
     // Hotel itemization sheet (if any hotel expenses)
     const hotelExpenses = expenses.filter(e => e.category === EXPENSE_CATEGORIES.HOTEL);
@@ -441,18 +457,6 @@ export function exportToExcel(expenses, filename = 'expense_report', claimInfo =
       styleSheet(mealsSheet, mealsData);
       XLSX.utils.book_append_sheet(workbook, mealsSheet, 'Meals Entertainment');
     }
-  }
-
-  // Generate filename with date
-  const dateStr = format(new Date(), 'yyyy-MM-dd');
-  let fullFilename;
-
-  if (usingOriginalTemplate) {
-    // Use original template name (without extension) + date
-    const templateBaseName = companyTemplate.name.replace(/\.[^/.]+$/, ''); // Remove extension
-    fullFilename = `${templateBaseName}_filled_${dateStr}.xlsx`;
-  } else {
-    fullFilename = `${filename}_${dateStr}.xlsx`;
   }
 
   // Write and download
