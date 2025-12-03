@@ -225,6 +225,91 @@ function getFieldValue(expense, fieldName) {
 }
 
 /**
+ * Currency symbols and formats
+ */
+const CURRENCY_FORMATS = {
+  'MYR': { symbol: 'RM', format: 'RM#,##0.00' },
+  'SGD': { symbol: 'S$', format: 'S$#,##0.00' },
+  'USD': { symbol: 'US$', format: 'US$#,##0.00' },
+  'EUR': { symbol: '€', format: '€#,##0.00' },
+  'GBP': { symbol: '£', format: '£#,##0.00' },
+  'JPY': { symbol: '¥', format: '¥#,##0' },
+  'CNY': { symbol: '¥', format: '¥#,##0.00' },
+  'THB': { symbol: '฿', format: '฿#,##0.00' },
+  'IDR': { symbol: 'Rp', format: 'Rp#,##0' },
+  'PHP': { symbol: '₱', format: '₱#,##0.00' },
+  'VND': { symbol: '₫', format: '₫#,##0' },
+  'KRW': { symbol: '₩', format: '₩#,##0' },
+  'INR': { symbol: '₹', format: '₹#,##0.00' },
+  'AUD': { symbol: 'A$', format: 'A$#,##0.00' },
+  'NZD': { symbol: 'NZ$', format: 'NZ$#,##0.00' },
+  'HKD': { symbol: 'HK$', format: 'HK$#,##0.00' },
+  'TWD': { symbol: 'NT$', format: 'NT$#,##0.00' },
+};
+
+/**
+ * Format amount with currency symbol
+ */
+function formatCurrencyValue(amount, currencyCode) {
+  const currency = CURRENCY_FORMATS[currencyCode?.toUpperCase()] || CURRENCY_FORMATS['USD'];
+  return `${currency.symbol}${Number(amount).toFixed(2)}`;
+}
+
+/**
+ * Get currency number format for ExcelJS
+ */
+function getCurrencyFormat(currencyCode) {
+  const currency = CURRENCY_FORMATS[currencyCode?.toUpperCase()] || CURRENCY_FORMATS['SGD'];
+  return currency.format;
+}
+
+/**
+ * Expand expenses to include hotel nightly breakdown
+ * Returns a flat array of rows to insert
+ */
+function expandExpensesForExport(expenses) {
+  const expandedRows = [];
+
+  expenses.forEach(expense => {
+    if (expense.category === EXPENSE_CATEGORIES.HOTEL &&
+        expense.hotelItemization &&
+        expense.hotelItemization.length > 0) {
+      // Expand hotel into nightly rows
+      expense.hotelItemization.forEach((night, index) => {
+        expandedRows.push({
+          ...expense,
+          date: night.nightDate || expense.date,
+          description: index === 0
+            ? `${expense.vendor} - Night ${index + 1} of ${expense.hotelItemization.length}`
+            : `Night ${index + 1} of ${expense.hotelItemization.length}`,
+          amount: night.roomRate || 0,
+          tax: (night.roomTax || 0) + (night.serviceCharge || 0),
+          total: night.dailyTotal || night.roomRate || 0,
+          // Include breakdown details
+          roomRate: night.roomRate,
+          roomTax: night.roomTax,
+          serviceCharge: night.serviceCharge,
+          resortFee: night.resortFee,
+          parkingFee: night.parkingFee,
+          otherFees: night.otherFees,
+          isHotelNight: true,
+          nightIndex: index,
+          totalNights: expense.hotelItemization.length
+        });
+      });
+    } else {
+      // Regular expense - add as single row
+      expandedRows.push({
+        ...expense,
+        isHotelNight: false
+      });
+    }
+  });
+
+  return expandedRows;
+}
+
+/**
  * Find the footer section in the template using ExcelJS worksheet
  * Returns the 1-indexed row where footer starts, or -1 if not found
  */
@@ -296,15 +381,24 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
     // Leave at least one empty row before footer
     maxDataRows = footerRowIndex - dataStartRow - 1;
   } else {
-    // No footer found, use reasonable default (20 rows for data)
-    maxDataRows = 20;
+    // No footer found, use reasonable default (30 rows for data)
+    maxDataRows = 30;
   }
 
   console.log('Available data rows:', maxDataRows);
-  console.log('Expenses to insert:', expenses.length);
+
+  // Sort expenses chronologically (earliest first)
+  const sortedExpenses = [...expenses].sort((a, b) => {
+    const dateA = new Date(a.date || '1900-01-01');
+    const dateB = new Date(b.date || '1900-01-01');
+    return dateA - dateB;
+  });
+
+  // Expand hotel expenses into nightly rows
+  const expandedExpenses = expandExpensesForExport(sortedExpenses);
+  console.log('Expenses after expansion:', expandedExpenses.length);
 
   // Get column mapping from template columns to actual Excel columns
-  // The columns in companyTemplate.columns correspond to non-empty cells in header row
   const columnIndices = [];
   const headerRowObj = worksheet.getRow(headerRow);
 
@@ -342,25 +436,60 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
   }
 
   // Insert expense data rows
-  const rowsToInsert = Math.min(expenses.length, maxDataRows);
-  if (expenses.length > maxDataRows) {
-    console.warn(`Warning: Only ${maxDataRows} rows available, but ${expenses.length} expenses to insert`);
+  const rowsToInsert = Math.min(expandedExpenses.length, maxDataRows);
+  if (expandedExpenses.length > maxDataRows) {
+    console.warn(`Warning: Only ${maxDataRows} rows available, but ${expandedExpenses.length} rows to insert`);
   }
 
   for (let expenseIndex = 0; expenseIndex < rowsToInsert; expenseIndex++) {
-    const expense = expenses[expenseIndex];
+    const expense = expandedExpenses[expenseIndex];
     const rowIndex = dataStartRow + expenseIndex;
 
     companyTemplate.columns.forEach((colName, idx) => {
       const colIndex = columnIndices[idx];
       const cell = worksheet.getCell(rowIndex, colIndex);
+      const normalizedColName = colName.toLowerCase().trim();
 
-      // Get the value for this column
-      const value = getExpenseValueForColumn(expense, colName);
+      // Get the value for this column with special handling
+      let value = getExpenseValueForColumn(expense, colName);
 
-      // Set cell value - ExcelJS preserves the cell's existing style
+      // Special handling for Amount (Local) - show original currency
+      if (normalizedColName.includes('amount') && normalizedColName.includes('local')) {
+        const localAmount = expense.amount || expense.total || 0;
+        const localCurrency = expense.currency || 'SGD';
+        value = formatCurrencyValue(localAmount, localCurrency);
+      }
+      // Special handling for Amount (Reimbursed) - show S$ converted amount
+      else if (normalizedColName.includes('amount') && normalizedColName.includes('reimburs')) {
+        const reimbursedAmount = expense.convertedTotal || expense.total || 0;
+        value = formatCurrencyValue(reimbursedAmount, 'SGD');
+      }
+
+      // Set cell value
       if (value !== '' && value !== null && value !== undefined) {
         cell.value = value;
+      }
+
+      // Apply alignment and indent
+      const existingAlignment = cell.alignment || {};
+
+      // Description column - left align
+      if (normalizedColName.includes('description') || normalizedColName.includes('details')) {
+        cell.alignment = {
+          ...existingAlignment,
+          horizontal: 'left',
+          indent: 1
+        };
+      }
+      // Date, Expense Type, Amount columns - add indent
+      else if (normalizedColName.includes('date') ||
+               normalizedColName.includes('expense type') ||
+               normalizedColName.includes('type') ||
+               normalizedColName.includes('amount')) {
+        cell.alignment = {
+          ...existingAlignment,
+          indent: 1
+        };
       }
     });
   }
