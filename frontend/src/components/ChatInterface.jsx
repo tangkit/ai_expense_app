@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Bot, User, Loader2, Upload, FileText } from 'lucide-react';
+import { Send, Paperclip, Bot, User, Loader2, Upload, FileText, PlusCircle, FileSpreadsheet, Receipt } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useExpense } from '../context/ExpenseContext';
 import FileUpload, { isTemplateFile } from './FileUpload';
@@ -10,20 +10,21 @@ import TemplateUpload from './TemplateUpload';
 import { parseReceipt } from '../services/receiptParser';
 import { EXPENSE_CATEGORIES, MEAL_COMPANION_THRESHOLD } from '../constants/expenseTypes';
 
-const WELCOME_MESSAGE = `Welcome to Tang's Expense Claim Assistant.
+const WELCOME_MESSAGE = `Welcome to Tang's Expense Claim Assistant!
 
-Let me help you input your expense claims:
+**Getting Started:**
+1. Click **"New Expense Claim"** above to enter your employee details (saved for future claims)
+2. Enter your **Purpose of Business Trip** - I'll auto-generate an Expense Title
+3. Click **"Upload Receipt"** to add your receipts
 
-• **Import company template** - Upload your company's expense template for customized exports
-• **Purpose of your business trip** - Just drag & drop or click to upload receipts and invoices
-• **Local currency to target conversion** - Input as local currency and convert to target currency (per OANDA exchange rate)
-• **Upload receipts** - Just drag & drop or click to upload receipts and invoices
-• **Extract information** - I'll automatically parse vendor, amount, date, and category
-• **Itemize hotel stays** - I break down hotel bills by night with all fees
-• **Track meals & customers** - For meals over $25, I'll help you record who you dined with
-• **Export to PDF/Excel** - Generate professional expense reports with receipts attached
+**What I can do:**
+• **Auto-extract information** - Vendor, amount, date, category from receipts
+• **Currency conversion** - Convert foreign currencies to SGD (per exchange rates)
+• **Itemize hotel stays** - Break down charges by night with all fees
+• **Track meal companions** - For meals over $25 (compliance requirement)
+• **Export with your template** - Populate your company's expense template
 
-How can I help you today? Start by setting up your expense claim details or uploading a receipt!`;
+Click the buttons above to get started, or type a message below!`;
 
 export default function ChatInterface() {
   const [inputValue, setInputValue] = useState('');
@@ -480,8 +481,41 @@ ${template.columns.length > 5 ? `• ... and ${template.columns.length - 5} more
 I'll use this template structure when exporting your expense report.`);
   };
 
+  // Check if employee info is filled
+  const hasEmployeeInfo = claimInfo.employeeName && claimInfo.jobPosition && claimInfo.department;
+
   return (
     <div className="chat-interface">
+      {/* Quick Actions Bar */}
+      <div className="quick-actions-bar">
+        <button
+          className={`quick-action-btn primary ${!hasEmployeeInfo ? 'highlight' : ''}`}
+          onClick={() => setShowClaimInfo(true)}
+          disabled={isProcessing || currentExpense || pendingExpenses.length > 0}
+        >
+          <PlusCircle size={18} />
+          <span>New Expense Claim</span>
+          {!hasEmployeeInfo && <span className="badge">Setup Required</span>}
+        </button>
+        <button
+          className="quick-action-btn secondary"
+          onClick={() => setShowTemplateUpload(true)}
+          disabled={isProcessing || currentExpense || showClaimInfo || pendingExpenses.length > 0}
+        >
+          <FileSpreadsheet size={18} />
+          <span>Upload Template</span>
+          {companyTemplate && <span className="badge success">✓</span>}
+        </button>
+        <button
+          className="quick-action-btn secondary"
+          onClick={() => setShowUpload(true)}
+          disabled={isProcessing || currentExpense || showClaimInfo || showTemplateUpload || pendingExpenses.length > 0}
+        >
+          <Receipt size={18} />
+          <span>Upload Receipt</span>
+        </button>
+      </div>
+
       <div className="messages-container">
         {messages.map((message) => (
           <MessageBubble key={message.id} message={message} />
