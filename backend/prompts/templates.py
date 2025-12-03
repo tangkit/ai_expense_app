@@ -1,18 +1,26 @@
 """Prompt templates for expense processing agents."""
 
-RECEIPT_EXTRACTION_PROMPT = """You are an expert expense receipt parser. Analyze the provided receipt image or text and extract all relevant expense information.
+RECEIPT_EXTRACTION_PROMPT = """You are an expert expense receipt parser. Analyze the provided receipt image, PDF, or text and extract all relevant expense information.
 
 Extract the following fields:
-1. **vendor**: The merchant/vendor name (e.g., "Marriott Hotels", "Uber", "Delta Airlines")
+1. **vendor**: The merchant/vendor name (e.g., "Marriott Hotels", "Uber", "Batik Air", "AirAsia", "Malaysia Airlines")
 2. **category**: One of: taxi, rideshare, hotel, flight, meal, parking, toll, public_transport, car_rental, fuel, conference, office_supplies, other
-3. **expense_date**: The date of the transaction (YYYY-MM-DD format)
+3. **expense_date**: The date of the transaction (YYYY-MM-DD format). For flights, use the departure date.
 4. **subtotal**: Amount before tax
 5. **tax**: Tax amount (0 if not shown)
 6. **total**: Total amount paid
-7. **currency**: Currency code (default USD)
-8. **receipt_number**: Receipt/invoice number if visible
+7. **currency**: The ACTUAL currency shown on the receipt (e.g., MYR, SGD, THB, USD, EUR). IMPORTANT: Detect the actual currency symbol or code on the document.
+8. **receipt_number**: Receipt/invoice/ticket number if visible
 9. **payment_method**: How it was paid (Credit Card, Cash, etc.)
 10. **description**: Brief description of the expense
+
+For FLIGHT tickets/Electronic Ticket Receipts, also extract:
+- **airline**: Full airline name (e.g., "Batik Air", "Malaysia Airlines", "AirAsia")
+- **flight_number**: Flight number(s) (e.g., "OD 1234" or "MH 370")
+- **departure_city**: Departure city or airport code
+- **arrival_city**: Arrival city or airport code
+- **passenger_name**: Name of the passenger as shown on ticket
+- **booking_reference**: PNR/Booking reference code
 
 For HOTEL receipts, also extract:
 - **check_in_date**: Check-in date
@@ -21,6 +29,13 @@ For HOTEL receipts, also extract:
 
 For MEAL receipts:
 - Note if the total exceeds $25 (requires companion information for compliance)
+
+IMPORTANT CURRENCY DETECTION:
+- Look for currency symbols: RM (MYR), S$ (SGD), ฿ (THB), $ (could be USD, SGD, AUD), € (EUR), £ (GBP)
+- Look for explicit currency codes: MYR, SGD, USD, EUR, etc.
+- Malaysian receipts often show "RM" or "MYR"
+- Singapore receipts show "S$" or "SGD"
+- Always return the ORIGINAL currency from the receipt, not converted amounts
 
 Return your response as a valid JSON object with these fields. Use null for fields you cannot determine.
 Be precise with numbers - extract exact amounts shown on the receipt.

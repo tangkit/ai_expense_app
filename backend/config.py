@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Business rules
     meal_companion_threshold: float = 25.0
 
+    # Currency settings
+    reimbursement_currency: str = "USD"
+    alphavantage_api_key: str = ""  # AlphaVantage API key for forex rates
+
     @property
     def cors_origins_list(self) -> list[str]:
         """Parse CORS origins into a list."""

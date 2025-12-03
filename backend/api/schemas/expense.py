@@ -76,6 +76,13 @@ class ExtractedExpense(BaseModel):
     total: Decimal = Field(..., ge=0, description="Total amount")
     currency: str = Field(default="USD", description="Currency code")
 
+    # Currency conversion fields (for foreign currency expenses)
+    original_currency: Optional[str] = Field(None, description="Original currency on receipt")
+    original_amount: Optional[Decimal] = Field(None, ge=0, description="Amount in original currency")
+    exchange_rate: Optional[Decimal] = Field(None, gt=0, description="Exchange rate used for conversion")
+    exchange_rate_source: Optional[str] = Field(None, description="Source of exchange rate (e.g., OANDA)")
+    exchange_rate_date: Optional[date] = Field(None, description="Date of exchange rate")
+
     # Receipt info
     receipt_number: Optional[str] = Field(None, description="Receipt/invoice number")
     payment_method: Optional[str] = Field(None, description="Payment method used")
@@ -91,6 +98,14 @@ class ExtractedExpense(BaseModel):
     companion_info: Optional[MealCompanionInfo] = Field(
         None, description="Companion info for meals over threshold"
     )
+
+    # Flight-specific fields
+    airline: Optional[str] = Field(None, description="Airline name")
+    flight_number: Optional[str] = Field(None, description="Flight number(s)")
+    departure_city: Optional[str] = Field(None, description="Departure city/airport")
+    arrival_city: Optional[str] = Field(None, description="Arrival city/airport")
+    passenger_name: Optional[str] = Field(None, description="Passenger name on ticket")
+    booking_reference: Optional[str] = Field(None, description="Booking/PNR reference")
 
     # Metadata
     confidence_score: float = Field(

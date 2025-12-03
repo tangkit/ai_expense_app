@@ -172,6 +172,27 @@ function transformBackendResponse(response, file) {
     }));
   }
 
+  // Build currency conversion info
+  const currencyConversion = expense.original_currency && expense.original_currency !== expense.currency ? {
+    originalCurrency: expense.original_currency,
+    originalAmount: parseFloat(expense.original_amount),
+    exchangeRate: parseFloat(expense.exchange_rate),
+    exchangeRateSource: expense.exchange_rate_source || 'OANDA',
+    exchangeRateDate: expense.exchange_rate_date,
+    convertedCurrency: expense.currency,
+    convertedAmount: parseFloat(expense.total)
+  } : null;
+
+  // Build flight info
+  const flightInfo = expense.airline ? {
+    airline: expense.airline,
+    flightNumber: expense.flight_number,
+    departureCity: expense.departure_city,
+    arrivalCity: expense.arrival_city,
+    passengerName: expense.passenger_name,
+    bookingReference: expense.booking_reference
+  } : null;
+
   return {
     id: uuidv4(),
     fileName: file.name,
@@ -192,10 +213,19 @@ function transformBackendResponse(response, file) {
       currency: expense.currency || 'USD',
       receiptNumber: expense.receipt_number || '',
       paymentMethod: expense.payment_method || '',
-      description: expense.description || ''
+      description: expense.description || '',
+      // Flight fields
+      airline: expense.airline,
+      flightNumber: expense.flight_number,
+      departureCity: expense.departure_city,
+      arrivalCity: expense.arrival_city,
+      passengerName: expense.passenger_name,
+      bookingReference: expense.booking_reference
     },
     requiresCompanion: expense.requires_companion,
-    hotelItemization
+    hotelItemization,
+    currencyConversion,
+    flightInfo
   };
 }
 

@@ -2,6 +2,7 @@
 
 import json
 import base64
+import asyncio
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, TypedDict, Literal, Any
@@ -10,6 +11,7 @@ from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from config import settings
+from services.exchange_rate import exchange_rate_service
 from api.schemas.expense import (
     ExpenseCategory,
     ExtractedExpense,
@@ -60,6 +62,14 @@ class ExpenseWorkflowState(TypedDict):
     category: str | None
     hotel_itemization: list[dict] | None
 
+    # Currency conversion
+    original_currency: str | None
+    original_amount: Decimal | None
+    exchange_rate: Decimal | None
+    exchange_rate_source: str | None
+    exchange_rate_date: date | None
+    converted_amount: Decimal | None
+
     # Output
     expense: ExtractedExpense | None
     validation_errors: list[str]
@@ -77,8 +87,9 @@ def parse_receipt(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
 
     file_content = state["file_content_base64"]
     file_type = state["file_type"]
+    file_name = state.get("file_name", "document")
 
-    # Build the message with image content
+    # Build the message with image/document content
     if file_type.startswith("image/"):
         # For images, use vision capabilities
         content = [
@@ -88,13 +99,42 @@ def parse_receipt(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
                 "image_url": {"url": f"data:{file_type};base64,{file_content}"},
             },
         ]
+    elif file_type == "application/pdf":
+        # For PDFs, send as document (Claude and GPT-4 support PDF vision)
+        # Claude uses document type, OpenAI uses file type
+        if settings.llm_provider == "anthropic":
+            content = [
+                {"type": "text", "text": RECEIPT_EXTRACTION_PROMPT.format(
+                    receipt_content=f"[See attached PDF document: {file_name}]"
+                )},
+                {
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "application/pdf",
+                        "data": file_content,
+                    },
+                },
+            ]
+        else:
+            # For OpenAI, convert PDF to image or use file upload
+            # Fallback: send as base64 image URL (some models support this)
+            content = [
+                {"type": "text", "text": RECEIPT_EXTRACTION_PROMPT.format(
+                    receipt_content=f"[See attached PDF document: {file_name}]"
+                )},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:application/pdf;base64,{file_content}"},
+                },
+            ]
     else:
-        # For PDFs or text, we'd need OCR first (simplified for now)
+        # For other types, just describe it
         content = [
             {
                 "type": "text",
                 "text": RECEIPT_EXTRACTION_PROMPT.format(
-                    receipt_content="[PDF document - please extract text and analyze]"
+                    receipt_content=f"[Document: {file_name}, type: {file_type}]"
                 ),
             }
         ]
@@ -332,6 +372,86 @@ def validate_expense(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     return state
 
 
+def convert_currency(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
+    """Convert foreign currency to reimbursement currency using exchange rates."""
+    if state.get("error"):
+        return state
+
+    extracted = state.get("extracted_data", {})
+    currency = extracted.get("currency", "USD").upper()
+    total = Decimal(str(extracted.get("total", 0)))
+    reimbursement_currency = settings.reimbursement_currency.upper()
+
+    # Store original currency info
+    state["original_currency"] = currency
+    state["original_amount"] = total
+
+    # Check if conversion is needed
+    if currency == reimbursement_currency:
+        state["exchange_rate"] = Decimal("1.0")
+        state["exchange_rate_source"] = "none"
+        state["exchange_rate_date"] = date.today()
+        state["converted_amount"] = total
+        state["processing_stage"] = "currency_converted"
+        return state
+
+    # Get expense date for historical rate
+    expense_date_str = extracted.get("expense_date", str(date.today()))
+    try:
+        if isinstance(expense_date_str, str):
+            expense_date = datetime.strptime(expense_date_str, "%Y-%m-%d").date()
+        else:
+            expense_date = expense_date_str
+    except:
+        expense_date = date.today()
+
+    # Fetch exchange rate (run async in sync context)
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        exchange_rate, source, rate_date = loop.run_until_complete(
+            exchange_rate_service.get_exchange_rate(currency, reimbursement_currency, expense_date)
+        )
+        loop.close()
+
+        state["exchange_rate"] = exchange_rate
+        state["exchange_rate_source"] = source
+        state["exchange_rate_date"] = rate_date
+
+        # Convert amount
+        converted = exchange_rate_service.convert_amount(total, exchange_rate)
+        state["converted_amount"] = converted
+
+        # Update extracted data with conversion info
+        extracted["original_currency"] = currency
+        extracted["original_amount"] = float(total)
+        extracted["exchange_rate"] = float(exchange_rate)
+        extracted["exchange_rate_source"] = source
+        extracted["exchange_rate_date"] = rate_date.isoformat()
+
+        # Update total to converted amount for reimbursement
+        extracted["total"] = float(converted)
+        extracted["currency"] = reimbursement_currency
+
+        # Add warning about conversion
+        warnings = state.get("validation_warnings", [])
+        warnings.append(
+            f"Currency converted from {currency} {total} to {reimbursement_currency} {converted} "
+            f"(rate: {exchange_rate:.4f} from {source})"
+        )
+        state["validation_warnings"] = warnings
+        state["extracted_data"] = extracted
+
+    except Exception as e:
+        # Log error but continue with original currency
+        warnings = state.get("validation_warnings", [])
+        warnings.append(f"Currency conversion failed: {str(e)}. Using original amounts.")
+        state["validation_warnings"] = warnings
+
+    state["processing_stage"] = "currency_converted"
+    return state
+
+
 def build_expense_output(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     """Build the final ExtractedExpense output."""
     if state.get("error"):
@@ -380,6 +500,16 @@ def build_expense_output(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
                     extracted["check_out_date"], "%Y-%m-%d"
                 ).date()
 
+        # Parse currency conversion dates
+        exchange_rate_date = None
+        if extracted.get("exchange_rate_date"):
+            try:
+                exchange_rate_date = datetime.strptime(
+                    extracted["exchange_rate_date"], "%Y-%m-%d"
+                ).date()
+            except:
+                exchange_rate_date = date.today()
+
         expense = ExtractedExpense(
             vendor=extracted.get("vendor", "Unknown"),
             category=ExpenseCategory(category),
@@ -389,11 +519,27 @@ def build_expense_output(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
             tax=Decimal(str(extracted.get("tax", 0))),
             total=Decimal(str(extracted.get("total", 0))),
             currency=extracted.get("currency", "USD"),
+            # Currency conversion fields
+            original_currency=extracted.get("original_currency"),
+            original_amount=Decimal(str(extracted.get("original_amount"))) if extracted.get("original_amount") else None,
+            exchange_rate=Decimal(str(extracted.get("exchange_rate"))) if extracted.get("exchange_rate") else None,
+            exchange_rate_source=extracted.get("exchange_rate_source"),
+            exchange_rate_date=exchange_rate_date,
+            # Receipt info
             receipt_number=extracted.get("receipt_number"),
             payment_method=extracted.get("payment_method"),
+            # Hotel fields
             check_in_date=check_in,
             check_out_date=check_out,
             hotel_itemization=hotel_items,
+            # Flight fields
+            airline=extracted.get("airline"),
+            flight_number=extracted.get("flight_number"),
+            departure_city=extracted.get("departure_city"),
+            arrival_city=extracted.get("arrival_city"),
+            passenger_name=extracted.get("passenger_name"),
+            booking_reference=extracted.get("booking_reference"),
+            # Metadata
             confidence_score=state.get("confidence_score", 0.8),
             requires_companion=extracted.get("requires_companion", False),
             requires_itemization=extracted.get("requires_itemization", False),
@@ -425,6 +571,7 @@ def create_expense_workflow() -> StateGraph:
     workflow.add_node("categorize", categorize_expense)
     workflow.add_node("itemize_hotel", itemize_hotel)
     workflow.add_node("validate", validate_expense)
+    workflow.add_node("convert_currency", convert_currency)
     workflow.add_node("build_output", build_expense_output)
 
     # Define edges
@@ -432,7 +579,8 @@ def create_expense_workflow() -> StateGraph:
     workflow.add_edge("parse_receipt", "categorize")
     workflow.add_edge("categorize", "itemize_hotel")
     workflow.add_edge("itemize_hotel", "validate")
-    workflow.add_edge("validate", "build_output")
+    workflow.add_edge("validate", "convert_currency")
+    workflow.add_edge("convert_currency", "build_output")
     workflow.add_edge("build_output", END)
 
     return workflow.compile()

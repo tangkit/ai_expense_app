@@ -234,12 +234,36 @@ Please make sure it's a valid Excel (.xls, .xlsx) or CSV file.`);
 **Detected Information:**
 • Vendor: ${parsedData.extracted.vendor}
 • Category: ${parsedData.extracted.category}
-• Date: ${parsedData.extracted.date}
+• Date: ${parsedData.extracted.date}`;
+
+        // Show currency conversion info if applicable
+        if (parsedData.currencyConversion) {
+          const conv = parsedData.currencyConversion;
+          extractionMessage += `
+• Original Amount: ${conv.originalCurrency} ${conv.originalAmount.toFixed(2)}
+• Exchange Rate: 1 ${conv.originalCurrency} = ${conv.exchangeRate.toFixed(4)} ${conv.convertedCurrency} (${conv.exchangeRateSource})
+• **Converted Total: $${conv.convertedAmount.toFixed(2)} ${conv.convertedCurrency}**`;
+        } else {
+          extractionMessage += `
 • Amount: $${parsedData.extracted.amount.toFixed(2)}
 • Tax: $${parsedData.extracted.tax.toFixed(2)}
 • **Total: $${parsedData.extracted.total.toFixed(2)}**`;
+        }
 
-        // Handle special cases
+        // Show flight info
+        if (parsedData.flightInfo) {
+          const flight = parsedData.flightInfo;
+          extractionMessage += `
+
+**Flight Details:**
+• Airline: ${flight.airline || 'N/A'}
+• Flight: ${flight.flightNumber || 'N/A'}
+• Route: ${flight.departureCity || 'N/A'} → ${flight.arrivalCity || 'N/A'}
+• Passenger: ${flight.passengerName || 'N/A'}
+• Booking Ref: ${flight.bookingReference || 'N/A'}`;
+        }
+
+        // Handle hotel itemization
         if (parsedData.extracted.category === EXPENSE_CATEGORIES.HOTEL && parsedData.hotelItemization) {
           extractionMessage += `
 
@@ -272,7 +296,9 @@ Please review and edit the details below, then click "Save Expense" to add it to
           requiresCompanion: parsedData.requiresCompanion,
           confidence: parsedData.confidence,
           fileName: parsedData.fileName,
-          receiptId: Date.now().toString() // Link to uploaded receipt
+          receiptId: Date.now().toString(), // Link to uploaded receipt
+          currencyConversion: parsedData.currencyConversion,
+          flightInfo: parsedData.flightInfo
         });
 
       } catch {
