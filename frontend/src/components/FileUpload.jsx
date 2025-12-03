@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Upload, X, FileImage, FileText, File, FileSpreadsheet } from 'lucide-react';
 
+// Extended MIME types to cover various browser behaviors
 const ACCEPTED_FILE_TYPES = {
   'image/jpeg': ['.jpg', '.jpeg'],
   'image/png': ['.png'],
@@ -10,11 +11,21 @@ const ACCEPTED_FILE_TYPES = {
   'application/pdf': ['.pdf'],
   'image/heic': ['.heic'],
   'image/heif': ['.heif'],
-  // Excel and CSV for templates
+  // Excel - multiple MIME types for compatibility
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
-  'application/vnd.ms-excel': ['.xls'],
+  'application/vnd.ms-excel': ['.xls', '.xlsx'],
+  'application/msexcel': ['.xls'],
+  'application/x-msexcel': ['.xls'],
+  'application/x-ms-excel': ['.xls'],
+  'application/x-excel': ['.xls'],
+  'application/x-dos_ms_excel': ['.xls'],
+  'application/xls': ['.xls'],
+  'application/excel': ['.xls'],
+  // CSV
   'text/csv': ['.csv'],
-  'application/csv': ['.csv']
+  'application/csv': ['.csv'],
+  'text/plain': ['.csv'],
+  'text/x-csv': ['.csv']
 };
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -23,6 +34,22 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 export function isTemplateFile(file) {
   const ext = file.name.toLowerCase();
   return ext.endsWith('.xlsx') || ext.endsWith('.xls') || ext.endsWith('.csv');
+}
+
+// Custom validator to accept files by extension even if MIME type doesn't match
+function customValidator(file) {
+  const ext = file.name.toLowerCase();
+  const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.heic', '.heif', '.xlsx', '.xls', '.csv'];
+
+  const hasValidExtension = validExtensions.some(validExt => ext.endsWith(validExt));
+
+  if (!hasValidExtension) {
+    return {
+      code: 'file-invalid-type',
+      message: `File type not supported`
+    };
+  }
+  return null;
 }
 
 export default function FileUpload({ onUpload, onCancel }) {
@@ -48,7 +75,8 @@ export default function FileUpload({ onUpload, onCancel }) {
     onDrop,
     accept: ACCEPTED_FILE_TYPES,
     maxSize: MAX_FILE_SIZE,
-    multiple: true
+    multiple: true,
+    validator: customValidator
   });
 
   const getDropzoneClass = () => {
