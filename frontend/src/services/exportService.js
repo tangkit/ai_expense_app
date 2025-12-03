@@ -440,23 +440,75 @@ function getFieldValue(expense, fieldName) {
  * Currency symbols and formats
  */
 const CURRENCY_FORMATS = {
-  'MYR': { symbol: 'RM', format: '"RM "#,##0.00' },
-  'SGD': { symbol: 'SGD', format: '"SGD "#,##0.00' },
-  'USD': { symbol: 'USD', format: '"USD "#,##0.00' },
-  'EUR': { symbol: '€', format: '"€ "#,##0.00' },
-  'GBP': { symbol: '£', format: '"£ "#,##0.00' },
-  'JPY': { symbol: '¥', format: '"¥ "#,##0' },
-  'CNY': { symbol: '¥', format: '"CNY "#,##0.00' },
-  'THB': { symbol: '฿', format: '"THB "#,##0.00' },
-  'IDR': { symbol: 'Rp', format: '"IDR "#,##0' },
-  'PHP': { symbol: '₱', format: '"PHP "#,##0.00' },
-  'VND': { symbol: '₫', format: '"VND "#,##0' },
-  'KRW': { symbol: '₩', format: '"KRW "#,##0' },
-  'INR': { symbol: '₹', format: '"INR "#,##0.00' },
-  'AUD': { symbol: 'A$', format: '"AUD "#,##0.00' },
-  'NZD': { symbol: 'NZ$', format: '"NZD "#,##0.00' },
-  'HKD': { symbol: 'HK$', format: '"HKD "#,##0.00' },
-  'TWD': { symbol: 'NT$', format: '"TWD "#,##0.00' },
+  // Southeast Asia
+  'MYR': { symbol: 'RM', format: '"RM "#,##0.00', decimals: 2 },
+  'SGD': { symbol: 'SGD', format: '"SGD "#,##0.00', decimals: 2 },
+  'THB': { symbol: '฿', format: '"THB "#,##0.00', decimals: 2 },
+  'IDR': { symbol: 'Rp', format: '"IDR "#,##0', decimals: 0 },
+  'PHP': { symbol: '₱', format: '"PHP "#,##0.00', decimals: 2 },
+  'VND': { symbol: '₫', format: '"VND "#,##0', decimals: 0 },
+  'BND': { symbol: 'B$', format: '"BND "#,##0.00', decimals: 2 },
+  'MMK': { symbol: 'K', format: '"MMK "#,##0', decimals: 0 },
+  'KHR': { symbol: '៛', format: '"KHR "#,##0', decimals: 0 },
+  'LAK': { symbol: '₭', format: '"LAK "#,##0', decimals: 0 },
+
+  // East Asia
+  'JPY': { symbol: '¥', format: '"¥ "#,##0', decimals: 0 },
+  'CNY': { symbol: '¥', format: '"CNY "#,##0.00', decimals: 2 },
+  'KRW': { symbol: '₩', format: '"₩ "#,##0', decimals: 0 },
+  'TWD': { symbol: 'NT$', format: '"TWD "#,##0', decimals: 0 },
+  'HKD': { symbol: 'HK$', format: '"HKD "#,##0.00', decimals: 2 },
+  'MOP': { symbol: 'MOP$', format: '"MOP "#,##0.00', decimals: 2 },
+
+  // South Asia
+  'INR': { symbol: '₹', format: '"INR "#,##0.00', decimals: 2 },
+  'PKR': { symbol: 'Rs', format: '"PKR "#,##0.00', decimals: 2 },
+  'BDT': { symbol: '৳', format: '"BDT "#,##0.00', decimals: 2 },
+  'LKR': { symbol: 'Rs', format: '"LKR "#,##0.00', decimals: 2 },
+  'NPR': { symbol: 'Rs', format: '"NPR "#,##0.00', decimals: 2 },
+
+  // Middle East
+  'AED': { symbol: 'AED', format: '"AED "#,##0.00', decimals: 2 },
+  'SAR': { symbol: 'SAR', format: '"SAR "#,##0.00', decimals: 2 },
+  'QAR': { symbol: 'QAR', format: '"QAR "#,##0.00', decimals: 2 },
+  'KWD': { symbol: 'KWD', format: '"KWD "#,##0.000', decimals: 3 },
+  'BHD': { symbol: 'BHD', format: '"BHD "#,##0.000', decimals: 3 },
+  'OMR': { symbol: 'OMR', format: '"OMR "#,##0.000', decimals: 3 },
+  'ILS': { symbol: '₪', format: '"ILS "#,##0.00', decimals: 2 },
+
+  // Europe
+  'EUR': { symbol: '€', format: '"€ "#,##0.00', decimals: 2 },
+  'GBP': { symbol: '£', format: '"£ "#,##0.00', decimals: 2 },
+  'CHF': { symbol: 'CHF', format: '"CHF "#,##0.00', decimals: 2 },
+  'SEK': { symbol: 'kr', format: '"SEK "#,##0.00', decimals: 2 },
+  'NOK': { symbol: 'kr', format: '"NOK "#,##0.00', decimals: 2 },
+  'DKK': { symbol: 'kr', format: '"DKK "#,##0.00', decimals: 2 },
+  'PLN': { symbol: 'zł', format: '"PLN "#,##0.00', decimals: 2 },
+  'CZK': { symbol: 'Kč', format: '"CZK "#,##0.00', decimals: 2 },
+  'HUF': { symbol: 'Ft', format: '"HUF "#,##0', decimals: 0 },
+  'RUB': { symbol: '₽', format: '"RUB "#,##0.00', decimals: 2 },
+  'TRY': { symbol: '₺', format: '"TRY "#,##0.00', decimals: 2 },
+
+  // Americas
+  'USD': { symbol: 'USD', format: '"USD "#,##0.00', decimals: 2 },
+  'CAD': { symbol: 'C$', format: '"CAD "#,##0.00', decimals: 2 },
+  'MXN': { symbol: 'MX$', format: '"MXN "#,##0.00', decimals: 2 },
+  'BRL': { symbol: 'R$', format: '"BRL "#,##0.00', decimals: 2 },
+  'ARS': { symbol: 'AR$', format: '"ARS "#,##0.00', decimals: 2 },
+  'CLP': { symbol: 'CL$', format: '"CLP "#,##0', decimals: 0 },
+  'COP': { symbol: 'CO$', format: '"COP "#,##0', decimals: 0 },
+  'PEN': { symbol: 'S/', format: '"PEN "#,##0.00', decimals: 2 },
+
+  // Oceania
+  'AUD': { symbol: 'A$', format: '"AUD "#,##0.00', decimals: 2 },
+  'NZD': { symbol: 'NZ$', format: '"NZD "#,##0.00', decimals: 2 },
+  'FJD': { symbol: 'FJ$', format: '"FJD "#,##0.00', decimals: 2 },
+
+  // Africa
+  'ZAR': { symbol: 'R', format: '"ZAR "#,##0.00', decimals: 2 },
+  'EGP': { symbol: 'E£', format: '"EGP "#,##0.00', decimals: 2 },
+  'NGN': { symbol: '₦', format: '"NGN "#,##0.00', decimals: 2 },
+  'KES': { symbol: 'KSh', format: '"KES "#,##0.00', decimals: 2 },
 };
 
 /**
@@ -1023,10 +1075,16 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
       // Special handling for Amount (Local) - show original currency as numeric with currency format
       if (normalizedColName.includes('amount') && normalizedColName.includes('local')) {
         const localAmount = expense.amount || expense.total || 0;
-        // Set as numeric value (not string) so Excel recognizes it as currency
-        cell.value = roundTo2Decimals(localAmount);
+        // Get currency configuration (decimals vary by currency - JPY=0, KWD=3, most=2)
+        const currencyConfig = CURRENCY_FORMATS[localCurrency];
+        const decimals = currencyConfig?.decimals ?? 2; // Default to 2 decimals for unknown currencies
+        // Round to correct number of decimals for this currency
+        const roundedAmount = decimals === 0 ? Math.round(localAmount) :
+          Math.round(localAmount * Math.pow(10, decimals)) / Math.pow(10, decimals);
+        cell.value = roundedAmount;
         // Apply currency number format based on local currency
-        const currencyFormat = CURRENCY_FORMATS[localCurrency]?.format || `"${localCurrency} "#,##0.00`;
+        const currencyFormat = currencyConfig?.format ||
+          (decimals === 0 ? `"${localCurrency} "#,##0` : `"${localCurrency} "#,##0.${'0'.repeat(decimals)}`);
         cell.numFmt = currencyFormat;
         value = null; // Skip the default value assignment below
       }
