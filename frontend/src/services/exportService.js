@@ -440,23 +440,23 @@ function getFieldValue(expense, fieldName) {
  * Currency symbols and formats
  */
 const CURRENCY_FORMATS = {
-  'MYR': { symbol: 'RM', format: 'RM#,##0.00' },
-  'SGD': { symbol: 'SGD', format: 'SGD#,##0.00' },
-  'USD': { symbol: 'USD', format: 'USD#,##0.00' },
-  'EUR': { symbol: '€', format: '€#,##0.00' },
-  'GBP': { symbol: '£', format: '£#,##0.00' },
-  'JPY': { symbol: '¥', format: '¥#,##0' },
-  'CNY': { symbol: '¥', format: '¥#,##0.00' },
-  'THB': { symbol: '฿', format: '฿#,##0.00' },
-  'IDR': { symbol: 'Rp', format: 'Rp#,##0' },
-  'PHP': { symbol: '₱', format: '₱#,##0.00' },
-  'VND': { symbol: '₫', format: '₫#,##0' },
-  'KRW': { symbol: '₩', format: '₩#,##0' },
-  'INR': { symbol: '₹', format: '₹#,##0.00' },
-  'AUD': { symbol: 'A$', format: 'A$#,##0.00' },
-  'NZD': { symbol: 'NZ$', format: 'NZ$#,##0.00' },
-  'HKD': { symbol: 'HK$', format: 'HK$#,##0.00' },
-  'TWD': { symbol: 'NT$', format: 'NT$#,##0.00' },
+  'MYR': { symbol: 'RM', format: '"RM "#,##0.00' },
+  'SGD': { symbol: 'SGD', format: '"SGD "#,##0.00' },
+  'USD': { symbol: 'USD', format: '"USD "#,##0.00' },
+  'EUR': { symbol: '€', format: '"€ "#,##0.00' },
+  'GBP': { symbol: '£', format: '"£ "#,##0.00' },
+  'JPY': { symbol: '¥', format: '"¥ "#,##0' },
+  'CNY': { symbol: '¥', format: '"CNY "#,##0.00' },
+  'THB': { symbol: '฿', format: '"THB "#,##0.00' },
+  'IDR': { symbol: 'Rp', format: '"IDR "#,##0' },
+  'PHP': { symbol: '₱', format: '"PHP "#,##0.00' },
+  'VND': { symbol: '₫', format: '"VND "#,##0' },
+  'KRW': { symbol: '₩', format: '"KRW "#,##0' },
+  'INR': { symbol: '₹', format: '"INR "#,##0.00' },
+  'AUD': { symbol: 'A$', format: '"AUD "#,##0.00' },
+  'NZD': { symbol: 'NZ$', format: '"NZD "#,##0.00' },
+  'HKD': { symbol: 'HK$', format: '"HKD "#,##0.00' },
+  'TWD': { symbol: 'NT$', format: '"TWD "#,##0.00' },
 };
 
 /**
@@ -968,10 +968,15 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
       // Get the value for this column with special handling
       let value = getExpenseValueForColumn(expense, colName);
 
-      // Special handling for Amount (Local) - show original currency
+      // Special handling for Amount (Local) - show original currency as numeric with currency format
       if (normalizedColName.includes('amount') && normalizedColName.includes('local')) {
         const localAmount = expense.amount || expense.total || 0;
-        value = formatCurrencyValue(localAmount, localCurrency);
+        // Set as numeric value (not string) so Excel recognizes it as currency
+        cell.value = roundTo2Decimals(localAmount);
+        // Apply currency number format based on local currency
+        const currencyFormat = CURRENCY_FORMATS[localCurrency]?.format || `"${localCurrency} "#,##0.00`;
+        cell.numFmt = currencyFormat;
+        value = null; // Skip the default value assignment below
       }
       // Special handling for Conversion Rate / Exchange Rate column
       // Matches: "Conversion Rate", "Conv Rate", "Exchange Rate", "Rate", "Conv. Rate", "FX Rate"
