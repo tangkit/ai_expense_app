@@ -264,7 +264,66 @@ function getCurrencyFormat(currencyCode) {
 }
 
 /**
- * Expand expenses to include hotel nightly breakdown
+ * Fetch exchange rate from Alpha Vantage API
+ * Returns the exchange rate from sourceCurrency to SGD
+ */
+async function getExchangeRate(sourceCurrency) {
+  // If already SGD, no conversion needed
+  if (!sourceCurrency || sourceCurrency.toUpperCase() === 'SGD') {
+    return 1;
+  }
+
+  try {
+    // Try to fetch from Alpha Vantage API
+    const apiKey = 'demo'; // Replace with actual API key or use MCP
+    const url = `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=${sourceCurrency}&to_currency=SGD&apikey=${apiKey}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data['Realtime Currency Exchange Rate']) {
+      const rate = parseFloat(data['Realtime Currency Exchange Rate']['5. Exchange Rate']);
+      console.log(`Exchange rate ${sourceCurrency} to SGD: ${rate}`);
+      return rate;
+    }
+
+    // Fallback rates if API fails (approximate rates as of 2024)
+    console.warn(`Alpha Vantage API failed, using fallback rate for ${sourceCurrency}`);
+    return getFallbackExchangeRate(sourceCurrency);
+  } catch (error) {
+    console.error('Error fetching exchange rate:', error);
+    return getFallbackExchangeRate(sourceCurrency);
+  }
+}
+
+/**
+ * Fallback exchange rates to SGD (approximate)
+ */
+function getFallbackExchangeRate(currency) {
+  const fallbackRates = {
+    'MYR': 0.29,   // 1 MYR ≈ 0.29 SGD
+    'USD': 1.35,   // 1 USD ≈ 1.35 SGD
+    'EUR': 1.45,   // 1 EUR ≈ 1.45 SGD
+    'GBP': 1.70,   // 1 GBP ≈ 1.70 SGD
+    'JPY': 0.009,  // 1 JPY ≈ 0.009 SGD
+    'CNY': 0.19,   // 1 CNY ≈ 0.19 SGD
+    'THB': 0.039,  // 1 THB ≈ 0.039 SGD
+    'IDR': 0.000085, // 1 IDR ≈ 0.000085 SGD
+    'PHP': 0.024,  // 1 PHP ≈ 0.024 SGD
+    'VND': 0.000054, // 1 VND ≈ 0.000054 SGD
+    'KRW': 0.00098, // 1 KRW ≈ 0.00098 SGD
+    'INR': 0.016,  // 1 INR ≈ 0.016 SGD
+    'AUD': 0.88,   // 1 AUD ≈ 0.88 SGD
+    'NZD': 0.81,   // 1 NZD ≈ 0.81 SGD
+    'HKD': 0.17,   // 1 HKD ≈ 0.17 SGD
+    'TWD': 0.042,  // 1 TWD ≈ 0.042 SGD
+  };
+
+  return fallbackRates[currency?.toUpperCase()] || 1;
+}
+
+/**
+ * Expand expenses to include hotel nightly breakdown with itemized charges
  * Returns a flat array of rows to insert
  */
 function expandExpensesForExport(expenses) {
@@ -274,28 +333,105 @@ function expandExpensesForExport(expenses) {
     if (expense.category === EXPENSE_CATEGORIES.HOTEL &&
         expense.hotelItemization &&
         expense.hotelItemization.length > 0) {
-      // Expand hotel into nightly rows
-      expense.hotelItemization.forEach((night, index) => {
-        expandedRows.push({
-          ...expense,
-          date: night.nightDate || expense.date,
-          description: index === 0
-            ? `${expense.vendor} - Night ${index + 1} of ${expense.hotelItemization.length}`
-            : `Night ${index + 1} of ${expense.hotelItemization.length}`,
-          amount: night.roomRate || 0,
-          tax: (night.roomTax || 0) + (night.serviceCharge || 0),
-          total: night.dailyTotal || night.roomRate || 0,
-          // Include breakdown details
-          roomRate: night.roomRate,
-          roomTax: night.roomTax,
-          serviceCharge: night.serviceCharge,
-          resortFee: night.resortFee,
-          parkingFee: night.parkingFee,
-          otherFees: night.otherFees,
-          isHotelNight: true,
-          nightIndex: index,
-          totalNights: expense.hotelItemization.length
-        });
+      const totalNights = expense.hotelItemization.length;
+
+      // Expand hotel into nightly rows with itemized charges
+      expense.hotelItemization.forEach((night, nightIndex) => {
+        const nightLabel = `Night ${nightIndex + 1} of ${totalNights}`;
+        const hasItemizedCharges = night.serviceCharge > 0 || night.roomTax > 0;
+
+        if (hasItemizedCharges) {
+          // Has itemized charges - create separate rows for each charge type
+
+          // Room Charges row
+          if (night.roomRate > 0) {
+            expandedRows.push({
+              ...expense,
+              date: night.nightDate || expense.date,
+              description: `${expense.vendor} - ${nightLabel}: Room Charges`,
+              amount: night.roomRate,
+              total: night.roomRate,
+              isHotelNight: true,
+              chargeType: 'room'
+            });
+          }
+
+          // Service Charges row
+          if (night.serviceCharge > 0) {
+            expandedRows.push({
+              ...expense,
+              date: night.nightDate || expense.date,
+              description: `${expense.vendor} - ${nightLabel}: Service Charges`,
+              amount: night.serviceCharge,
+              total: night.serviceCharge,
+              isHotelNight: true,
+              chargeType: 'service'
+            });
+          }
+
+          // Taxes row
+          if (night.roomTax > 0) {
+            expandedRows.push({
+              ...expense,
+              date: night.nightDate || expense.date,
+              description: `${expense.vendor} - ${nightLabel}: Taxes`,
+              amount: night.roomTax,
+              total: night.roomTax,
+              isHotelNight: true,
+              chargeType: 'tax'
+            });
+          }
+
+          // Resort Fee row (if applicable)
+          if (night.resortFee > 0) {
+            expandedRows.push({
+              ...expense,
+              date: night.nightDate || expense.date,
+              description: `${expense.vendor} - ${nightLabel}: Resort Fee`,
+              amount: night.resortFee,
+              total: night.resortFee,
+              isHotelNight: true,
+              chargeType: 'resort'
+            });
+          }
+
+          // Parking Fee row (if applicable)
+          if (night.parkingFee > 0) {
+            expandedRows.push({
+              ...expense,
+              date: night.nightDate || expense.date,
+              description: `${expense.vendor} - ${nightLabel}: Parking Fee`,
+              amount: night.parkingFee,
+              total: night.parkingFee,
+              isHotelNight: true,
+              chargeType: 'parking'
+            });
+          }
+
+          // Other Fees row (if applicable)
+          if (night.otherFees > 0) {
+            expandedRows.push({
+              ...expense,
+              date: night.nightDate || expense.date,
+              description: `${expense.vendor} - ${nightLabel}: Other Fees`,
+              amount: night.otherFees,
+              total: night.otherFees,
+              isHotelNight: true,
+              chargeType: 'other'
+            });
+          }
+        } else {
+          // No itemized charges - just show Accommodation
+          expandedRows.push({
+            ...expense,
+            date: night.nightDate || expense.date,
+            description: `${expense.vendor} - ${nightLabel}: Accommodation`,
+            amount: night.roomRate || night.dailyTotal || 0,
+            total: night.dailyTotal || night.roomRate || 0,
+            isHotelNight: true,
+            chargeType: 'accommodation'
+          });
+        }
       });
     } else {
       // Regular expense - add as single row
@@ -441,9 +577,24 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
     console.warn(`Warning: Only ${maxDataRows} rows available, but ${expandedExpenses.length} rows to insert`);
   }
 
+  // Collect unique currencies and fetch exchange rates
+  const uniqueCurrencies = [...new Set(expandedExpenses.map(e => e.currency?.toUpperCase()).filter(Boolean))];
+  console.log('Unique currencies found:', uniqueCurrencies);
+
+  const exchangeRates = {};
+  for (const currency of uniqueCurrencies) {
+    exchangeRates[currency] = await getExchangeRate(currency);
+    console.log(`Exchange rate for ${currency}: ${exchangeRates[currency]}`);
+  }
+
   for (let expenseIndex = 0; expenseIndex < rowsToInsert; expenseIndex++) {
     const expense = expandedExpenses[expenseIndex];
     const rowIndex = dataStartRow + expenseIndex;
+
+    // Get the local currency and exchange rate
+    const localCurrency = (expense.currency || 'SGD').toUpperCase();
+    const exchangeRate = exchangeRates[localCurrency] || 1;
+    const isSGD = localCurrency === 'SGD';
 
     companyTemplate.columns.forEach((colName, idx) => {
       const colIndex = columnIndices[idx];
@@ -456,12 +607,13 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
       // Special handling for Amount (Local) - show original currency
       if (normalizedColName.includes('amount') && normalizedColName.includes('local')) {
         const localAmount = expense.amount || expense.total || 0;
-        const localCurrency = expense.currency || 'SGD';
         value = formatCurrencyValue(localAmount, localCurrency);
       }
       // Special handling for Amount (Reimbursed) - show S$ converted amount
       else if (normalizedColName.includes('amount') && normalizedColName.includes('reimburs')) {
-        const reimbursedAmount = expense.convertedTotal || expense.total || 0;
+        const localAmount = expense.amount || expense.total || 0;
+        // If already SGD, use the same value; otherwise convert
+        const reimbursedAmount = isSGD ? localAmount : (localAmount * exchangeRate);
         value = formatCurrencyValue(reimbursedAmount, 'SGD');
       }
 
