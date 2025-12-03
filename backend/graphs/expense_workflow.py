@@ -422,6 +422,9 @@ def infer_currency_from_airline(airline: str, departure_city: str = None) -> str
 
 def convert_currency(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     """Convert foreign currency to reimbursement currency using exchange rates."""
+    import logging
+    logger = logging.getLogger(__name__)
+
     if state.get("error"):
         return state
 
@@ -430,6 +433,9 @@ def convert_currency(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     total = Decimal(str(extracted.get("total", 0)))
     reimbursement_currency = settings.reimbursement_currency.upper()
 
+    logger.info(f"Currency conversion: detected currency={currency}, airline={extracted.get('airline')}, departure={extracted.get('departure_city')}")
+    print(f"[CURRENCY] Detected: {currency}, Airline: {extracted.get('airline')}, Departure: {extracted.get('departure_city')}")
+
     # If currency is USD but we have airline info, try to infer the actual currency
     if currency == "USD" and extracted.get("airline"):
         inferred_currency = infer_currency_from_airline(
@@ -437,9 +443,15 @@ def convert_currency(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
             extracted.get("departure_city", "")
         )
         if inferred_currency:
+            print(f"[CURRENCY] Inferred {inferred_currency} from airline {extracted.get('airline')}")
+            logger.info(f"Inferred currency {inferred_currency} from airline")
             currency = inferred_currency
             extracted["currency"] = currency
             state["extracted_data"] = extracted
+        else:
+            print(f"[CURRENCY] Could not infer currency from airline {extracted.get('airline')}")
+    else:
+        print(f"[CURRENCY] Not inferring - currency is {currency}, airline is {extracted.get('airline')}")
 
     # Store original currency info
     state["original_currency"] = currency

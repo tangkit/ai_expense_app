@@ -244,10 +244,14 @@ Please make sure it's a valid Excel (.xls, .xlsx) or CSV file.`);
 • Exchange Rate: 1 ${conv.originalCurrency} = ${conv.exchangeRate.toFixed(4)} ${conv.convertedCurrency} (${conv.exchangeRateSource})
 • **Converted Total: $${conv.convertedAmount.toFixed(2)} ${conv.convertedCurrency}**`;
         } else {
+          const currencySymbol = parsedData.extracted.currency === 'MYR' ? 'RM ' :
+                                 parsedData.extracted.currency === 'SGD' ? 'S$' :
+                                 parsedData.extracted.currency === 'EUR' ? '€' :
+                                 parsedData.extracted.currency === 'GBP' ? '£' : '$';
           extractionMessage += `
-• Amount: $${parsedData.extracted.amount.toFixed(2)}
-• Tax: $${parsedData.extracted.tax.toFixed(2)}
-• **Total: $${parsedData.extracted.total.toFixed(2)}**`;
+• Amount: ${currencySymbol}${parsedData.extracted.amount.toFixed(2)} ${parsedData.extracted.currency || 'USD'}
+• Tax: ${currencySymbol}${parsedData.extracted.tax.toFixed(2)}
+• **Total: ${currencySymbol}${parsedData.extracted.total.toFixed(2)} ${parsedData.extracted.currency || 'USD'}**`;
         }
 
         // Show flight info
