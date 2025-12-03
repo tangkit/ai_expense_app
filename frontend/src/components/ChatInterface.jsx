@@ -266,7 +266,7 @@ Please make sure it's a valid Excel (.xls, .xlsx) or CSV file.`);
 **Receipt ${idx + 1}:**
 • Vendor: ${parsedData.extracted.vendor}
 • Category: ${parsedData.extracted.category}
-• Total: ${currencySymbol}${parsedData.extracted.total.toFixed(2)} ${currency}`;
+• Total: ${currencySymbol}${parsedData.extracted.total.toFixed(2)}`;
           });
 
           multiReceiptMessage += `
@@ -315,16 +315,16 @@ All receipts are shown below for your review. Edit each one and click "Save Expe
           // Log the exchange rate source to console for verification
           console.log(`Exchange rate source: ${conv.exchangeRateSource} (1 ${conv.originalCurrency} = ${conv.exchangeRate.toFixed(4)} ${conv.convertedCurrency})`);
           extractionMessage += `
-• **Original Amount: ${origSymbol}${conv.originalAmount.toFixed(2)} ${conv.originalCurrency}**
+• **Original Amount: ${origSymbol}${conv.originalAmount.toFixed(2)}**
 • Conversion Rate: ${conv.exchangeRate.toFixed(4)}
-• **Converted for Reimbursement: ${convSymbol}${conv.convertedAmount.toFixed(2)} ${conv.convertedCurrency}**`;
+• **Converted for Reimbursement: ${convSymbol}${conv.convertedAmount.toFixed(2)}**`;
         } else {
           const currency = parsedData.extracted.currency || 'USD';
           const currencySymbol = getCurrencySymbol(currency);
           extractionMessage += `
-• Amount: ${currencySymbol}${parsedData.extracted.amount.toFixed(2)} ${currency}
+• Amount: ${currencySymbol}${parsedData.extracted.amount.toFixed(2)}
 • Tax: ${currencySymbol}${parsedData.extracted.tax.toFixed(2)}
-• **Total: ${currencySymbol}${parsedData.extracted.total.toFixed(2)} ${currency}**`;
+• **Total: ${currencySymbol}${parsedData.extracted.total.toFixed(2)}**`;
         }
 
         // Show flight info
@@ -404,7 +404,7 @@ Please review and edit the details below, then click "Save Expense" to add it to
 
     addBotMessage(`✅ Expense saved successfully!
 
-**${expense.vendor}** - ${currSymbol}${expense.total.toFixed(2)} ${expense.currency}
+**${expense.vendor}** - ${currSymbol}${expense.total.toFixed(2)}
 Category: ${expense.category}
 ${claimInfo.claimName ? `\nAdded to: ${claimInfo.claimName}` : ''}
 
@@ -430,7 +430,7 @@ The expense has been added to your report. Upload another receipt or type "expor
     const remainingCount = pendingExpenses.length - 1;
 
     if (remainingCount > 0) {
-      addBotMessage(`✅ Expense saved: **${expense.vendor}** - ${currSymbol}${expense.total.toFixed(2)} ${expense.currency}
+      addBotMessage(`✅ Expense saved: **${expense.vendor}** - ${currSymbol}${expense.total.toFixed(2)}
 
 ${remainingCount} receipt(s) remaining for review.`);
     } else {
