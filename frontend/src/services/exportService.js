@@ -719,6 +719,7 @@ function populateClaimInfoFields(worksheet, headerRow, totalRows, claimInfo) {
   console.log('=== Populating Claim Info Fields ===');
 
   // Define field mappings: keyword patterns -> claimInfo field
+  // Note: Manager/Approver section fields are handled specially
   const fieldMappings = [
     { patterns: ['employee name', 'name:', 'employee:'], field: 'employeeName', label: 'Employee Name' },
     { patterns: ['position', 'job title', 'title:', 'designation'], field: 'jobPosition', label: 'Job Position' },
@@ -726,66 +727,117 @@ function populateClaimInfoFields(worksheet, headerRow, totalRows, claimInfo) {
     { patterns: ['expense title', 'claim title', 'report title', 'title of expense'], field: 'expenseTitle', label: 'Expense Title' },
     { patterns: ['purpose', 'business purpose', 'trip purpose', 'reason'], field: 'businessPurpose', label: 'Business Purpose' },
     { patterns: ['submission date', 'date submitted', 'claim date', 'date:'], field: 'submissionDate', label: 'Submission Date' },
-    { patterns: ['manager', 'approver', 'approved by', 'supervisor', 'reporting to'], field: 'approverName', label: 'Approver Name' },
-    { patterns: ['approver title', "approver's title", "manager's title", 'approving officer'], field: 'approverTitle', label: 'Approver Title' },
   ];
 
-  // Scan header section (rows before the data header)
-  for (let rowNum = 1; rowNum < headerRow; rowNum++) {
-    const row = worksheet.getRow(rowNum);
-    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-      const cellValue = cell.value ? String(cell.value).toLowerCase().trim() : '';
+  // Track Manager/Approver section locations (row, column) for context-aware field filling
+  const managerSectionLocations = [];
 
-      for (const mapping of fieldMappings) {
-        for (const pattern of mapping.patterns) {
-          if (cellValue.includes(pattern)) {
-            const value = claimInfo[mapping.field];
-            if (value) {
-              // Find the cell to fill - check if current cell ends with ":" or next cell
-              const nextCell = worksheet.getCell(rowNum, colNumber + 1);
-
-              if (cellValue.endsWith(':') || !nextCell.value) {
-                // Fill the next cell
-                nextCell.value = value;
-                console.log(`Filled ${mapping.label} at row ${rowNum}, col ${colNumber + 1}: "${value}"`);
-              } else {
-                // Check if the cell itself should be replaced (e.g., "Employee Name: [value]")
-                // In this case, append value after the label
-                cell.value = `${cell.value} ${value}`;
-                console.log(`Appended ${mapping.label} at row ${rowNum}, col ${colNumber}: "${value}"`);
-              }
-            }
-            return; // Found match, move to next cell
-          }
-        }
+  // Helper function to check if a row/col is in the Manager/Approver section
+  // (within 3 rows below a Manager/Approver label, same or adjacent column)
+  const isInManagerSection = (rowNum, colNumber) => {
+    for (const loc of managerSectionLocations) {
+      if (rowNum > loc.row && rowNum <= loc.row + 3 && Math.abs(colNumber - loc.col) <= 2) {
+        return true;
       }
-    });
-  }
+    }
+    return false;
+  };
 
-  // Also scan footer section (rows after data area)
-  for (let rowNum = headerRow + 1; rowNum <= totalRows; rowNum++) {
-    const row = worksheet.getRow(rowNum);
-    row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-      const cellValue = cell.value ? String(cell.value).toLowerCase().trim() : '';
+  // Helper function to fill a cell with proper handling
+  const fillCell = (rowNum, colNumber, cellValue, value, label, isFooter = false) => {
+    const nextCell = worksheet.getCell(rowNum, colNumber + 1);
+    const section = isFooter ? 'footer ' : '';
 
-      for (const mapping of fieldMappings) {
-        for (const pattern of mapping.patterns) {
+    if (cellValue.endsWith(':') || !nextCell.value) {
+      // Fill the next cell
+      nextCell.value = value;
+      console.log(`Filled ${label} at ${section}row ${rowNum}, col ${colNumber + 1}: "${value}"`);
+    }
+  };
+
+  // First pass: Find Manager/Approver section labels and fill name UNDERNEATH
+  const scanForManagerSection = (startRow, endRow, isFooter = false) => {
+    for (let rowNum = startRow; rowNum <= endRow; rowNum++) {
+      const row = worksheet.getRow(rowNum);
+      row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        const cellValue = cell.value ? String(cell.value).toLowerCase().trim() : '';
+
+        // Check for Manager/Approver labels
+        const managerPatterns = ['manager/approver', 'manager / approver', 'manager', 'approver', 'approved by', 'supervisor', 'reporting to'];
+        for (const pattern of managerPatterns) {
           if (cellValue.includes(pattern)) {
-            const value = claimInfo[mapping.field];
-            if (value) {
-              const nextCell = worksheet.getCell(rowNum, colNumber + 1);
+            // Record this location
+            managerSectionLocations.push({ row: rowNum, col: colNumber });
+            console.log(`Found Manager/Approver section at row ${rowNum}, col ${colNumber}: "${cellValue}"`);
 
-              if (cellValue.endsWith(':') || !nextCell.value) {
-                nextCell.value = value;
-                console.log(`Filled ${mapping.label} at footer row ${rowNum}, col ${colNumber + 1}: "${value}"`);
+            // Fill name in the row BELOW, same column
+            if (claimInfo.approverName) {
+              const belowCell = worksheet.getCell(rowNum + 1, colNumber);
+              // Only fill if the cell below is empty or contains a placeholder
+              const belowValue = belowCell.value ? String(belowCell.value).trim() : '';
+              if (!belowValue || belowValue === '' || belowValue.startsWith('[') || belowValue.startsWith('_')) {
+                belowCell.value = claimInfo.approverName;
+                console.log(`Filled Approver Name BELOW at row ${rowNum + 1}, col ${colNumber}: "${claimInfo.approverName}"`);
               }
             }
             return;
           }
         }
-      }
-    });
-  }
+      });
+    }
+  };
+
+  // Scan header and footer for Manager/Approver sections first
+  scanForManagerSection(1, headerRow - 1, false);
+  scanForManagerSection(headerRow + 1, totalRows, true);
+
+  // Second pass: Fill other fields, with context-aware handling for Position
+  const scanAndFillFields = (startRow, endRow, isFooter = false) => {
+    for (let rowNum = startRow; rowNum <= endRow; rowNum++) {
+      const row = worksheet.getRow(rowNum);
+      row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        const cellValue = cell.value ? String(cell.value).toLowerCase().trim() : '';
+
+        // Special handling for Position field - context-aware
+        const positionPatterns = ['position', 'job title', 'title:', 'designation'];
+        for (const pattern of positionPatterns) {
+          if (cellValue.includes(pattern) && !cellValue.includes('approver') && !cellValue.includes('manager')) {
+            // Check if this Position is in the Manager/Approver section
+            const inManagerSection = isInManagerSection(rowNum, colNumber);
+            const fieldToUse = inManagerSection ? 'approverTitle' : 'jobPosition';
+            const labelToUse = inManagerSection ? 'Approver Title' : 'Job Position';
+            const value = claimInfo[fieldToUse];
+
+            if (value) {
+              console.log(`Position field at row ${rowNum} is ${inManagerSection ? 'IN' : 'NOT in'} Manager section, using ${fieldToUse}`);
+              fillCell(rowNum, colNumber, cellValue, value, labelToUse, isFooter);
+            }
+            return;
+          }
+        }
+
+        // Handle other standard field mappings
+        for (const mapping of fieldMappings) {
+          // Skip position patterns as they're handled above
+          if (mapping.field === 'jobPosition') continue;
+
+          for (const pattern of mapping.patterns) {
+            if (cellValue.includes(pattern)) {
+              const value = claimInfo[mapping.field];
+              if (value) {
+                fillCell(rowNum, colNumber, cellValue, value, mapping.label, isFooter);
+              }
+              return;
+            }
+          }
+        }
+      });
+    }
+  };
+
+  // Fill fields in header and footer sections
+  scanAndFillFields(1, headerRow - 1, false);
+  scanAndFillFields(headerRow + 1, totalRows, true);
 }
 
 /**
