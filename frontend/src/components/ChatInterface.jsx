@@ -33,6 +33,7 @@ export default function ChatInterface() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const welcomeAddedRef = useRef(false);
+  const uploadContainerRef = useRef(null);
 
   const {
     messages,
@@ -65,7 +66,14 @@ export default function ChatInterface() {
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, currentExpense]);
+  }, [messages, currentExpense, pendingExpenses]);
+
+  // Scroll to upload container when it appears
+  useEffect(() => {
+    if (showUpload && uploadContainerRef.current) {
+      uploadContainerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [showUpload]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -530,7 +538,7 @@ I'll use this template structure when exporting your expense report.`);
         )}
 
         {showUpload && !currentExpense && !showClaimInfo && !showTemplateUpload && pendingExpenses.length === 0 && (
-          <div className="upload-container">
+          <div className="upload-container" ref={uploadContainerRef}>
             <FileUpload
               onUpload={handleFileUpload}
               onCancel={() => setShowUpload(false)}
