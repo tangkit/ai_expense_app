@@ -216,6 +216,47 @@ export async function getBusinessRules() {
 }
 
 /**
+ * Get exchange rate from one currency to SGD
+ * @param {string} fromCurrency - Source currency code (e.g., 'MYR', 'USD')
+ * @returns {Promise<Object>} - Exchange rate response
+ */
+export async function getExchangeRate(fromCurrency) {
+  const response = await fetch(`${API_BASE_URL}/currency/rate/${fromCurrency}`);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Get exchange rates for multiple currencies at once
+ * @param {string[]} currencies - Array of currency codes
+ * @returns {Promise<Object>} - Bulk exchange rates response
+ */
+export async function getBulkExchangeRates(currencies) {
+  const response = await fetch(`${API_BASE_URL}/currency/rates/bulk`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      currencies,
+      to_currency: 'SGD',
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+    throw new Error(error.detail || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
  * Check if backend is available
  * @returns {Promise<boolean>} - True if backend is healthy
  */
@@ -245,5 +286,7 @@ export default {
   getSupportedTypes,
   getCategories,
   getBusinessRules,
+  getExchangeRate,
+  getBulkExchangeRates,
   checkBackendHealth,
 };
