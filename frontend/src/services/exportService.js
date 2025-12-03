@@ -758,8 +758,30 @@ function populateClaimInfoFields(worksheet, headerRow, totalRows, claimInfo) {
 }
 
 /**
+ * Find the TOTAL row in the template data area
+ * Returns the 1-indexed row number where TOTAL is found, or -1 if not found
+ */
+function findTotalRowExcelJS(worksheet, headerRowIndex, totalRows) {
+  // Search for "TOTAL" in the first few columns of each row after header
+  for (let row = headerRowIndex + 1; row <= totalRows; row++) {
+    for (let col = 1; col <= 5; col++) {
+      const cell = worksheet.getCell(row, col);
+      if (cell && cell.value) {
+        const cellValue = String(cell.value).toUpperCase().trim();
+        // Match "TOTAL" but not "TOTAL EXPENSES" or "GRAND TOTAL" (those are footer)
+        if (cellValue === 'TOTAL' || cellValue === 'TOTAL:') {
+          console.log(`Found TOTAL row at row ${row}, col ${col}`);
+          return row;
+        }
+      }
+    }
+  }
+  return -1; // No TOTAL row found
+}
+
+/**
  * Populate the original company template with expense data using ExcelJS
- * Preserves original formatting, structure, and footer section
+ * Preserves original formatting, structure, TOTAL row, and footer section
  */
 async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimInfo = null) {
   console.log('=== Populating Original Template with ExcelJS ===');
@@ -796,14 +818,21 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
     populateClaimInfoFields(worksheet, headerRow, totalRows, claimInfo);
   }
 
+  // Find TOTAL row to preserve it (before finding footer)
+  const totalRowIndex = findTotalRowExcelJS(worksheet, headerRow, totalRows);
+  console.log('TOTAL row found at row:', totalRowIndex >= 0 ? totalRowIndex : 'Not found');
+
   // Find footer section to preserve it
   const footerRowIndex = findFooterSectionExcelJS(worksheet, headerRow, totalRows);
   console.log('Footer section starts at row:', footerRowIndex >= 0 ? footerRowIndex : 'Not found');
 
-  // Calculate available data rows
+  // Calculate available data rows (excluding TOTAL row and footer)
   let maxDataRows;
-  if (footerRowIndex >= 0) {
-    // Leave at least one empty row before footer
+  if (totalRowIndex >= 0) {
+    // TOTAL row exists - data rows are between header and TOTAL row
+    maxDataRows = totalRowIndex - dataStartRow;
+  } else if (footerRowIndex >= 0) {
+    // No TOTAL row, but footer exists - leave one row before footer
     maxDataRows = footerRowIndex - dataStartRow - 1;
   } else {
     // No footer found, use reasonable default (30 rows for data)
@@ -850,8 +879,18 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
 
   console.log('Column indices:', columnIndices);
 
-  // Clear only the data area cells (between header and footer)
-  const dataEndRow = footerRowIndex >= 0 ? footerRowIndex - 2 : dataStartRow + maxDataRows - 1;
+  // Determine where to stop clearing data (exclude TOTAL row and footer)
+  let dataEndRow;
+  if (totalRowIndex >= 0) {
+    // Stop one row before TOTAL row
+    dataEndRow = totalRowIndex - 1;
+  } else if (footerRowIndex >= 0) {
+    dataEndRow = footerRowIndex - 2;
+  } else {
+    dataEndRow = dataStartRow + maxDataRows - 1;
+  }
+
+  // Clear only the data area cells (between header and TOTAL/footer)
   for (let row = dataStartRow; row <= dataEndRow; row++) {
     for (const colIndex of columnIndices) {
       const cell = worksheet.getCell(row, colIndex);
@@ -966,6 +1005,76 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
   }
 
   console.log('Populated', rowsToInsert, 'expense rows starting at row', dataStartRow);
+
+  // Populate TOTAL row with column sums if TOTAL row exists
+  if (totalRowIndex >= 0) {
+    console.log('=== Populating TOTAL row at row', totalRowIndex, '===');
+
+    // Find which columns are Amount (Local) and Amount (Reimbursed)
+    let amountLocalColIndex = -1;
+    let amountReimbursedColIndex = -1;
+
+    companyTemplate.columns.forEach((colName, idx) => {
+      const normalizedColName = colName.toLowerCase().trim();
+      if (normalizedColName.includes('amount') && normalizedColName.includes('local')) {
+        amountLocalColIndex = columnIndices[idx];
+        console.log(`Found Amount (Local) column at index ${amountLocalColIndex}`);
+      }
+      if (normalizedColName.includes('amount') && normalizedColName.includes('reimburs')) {
+        amountReimbursedColIndex = columnIndices[idx];
+        console.log(`Found Amount (Reimbursed) column at index ${amountReimbursedColIndex}`);
+      }
+    });
+
+    // Calculate sums from populated data
+    let sumLocal = 0;
+    let sumReimbursed = 0;
+
+    // Sum up the amounts from each expense
+    for (let i = 0; i < rowsToInsert; i++) {
+      const expense = expandedExpenses[i];
+      const localCurrency = (expense.currency || 'SGD').toUpperCase();
+      const exchangeRate = exchangeRates[localCurrency] || 1;
+      const isSGD = localCurrency === 'SGD';
+
+      const localAmount = expense.amount || expense.total || 0;
+      sumLocal += roundTo2Decimals(localAmount);
+
+      // Reimbursed amount: if already SGD use same value, otherwise convert
+      const reimbursedAmount = isSGD ? localAmount : (localAmount * exchangeRate);
+      sumReimbursed += roundTo2Decimals(reimbursedAmount);
+    }
+
+    // Round final sums
+    sumLocal = roundTo2Decimals(sumLocal);
+    sumReimbursed = roundTo2Decimals(sumReimbursed);
+
+    console.log(`Total Amount (Local): ${sumLocal}`);
+    console.log(`Total Amount (Reimbursed): ${sumReimbursed}`);
+
+    // Populate the TOTAL row cells
+    if (amountLocalColIndex >= 0) {
+      const totalLocalCell = worksheet.getCell(totalRowIndex, amountLocalColIndex);
+      // Format with currency - determine most common currency or default to SGD
+      const currencies = expandedExpenses.slice(0, rowsToInsert).map(e => (e.currency || 'SGD').toUpperCase());
+      const mostCommonCurrency = currencies.reduce((acc, curr) => {
+        acc[curr] = (acc[curr] || 0) + 1;
+        return acc;
+      }, {});
+      const primaryCurrency = Object.keys(mostCommonCurrency).reduce((a, b) =>
+        mostCommonCurrency[a] > mostCommonCurrency[b] ? a : b, 'SGD');
+
+      totalLocalCell.value = formatCurrencyValue(sumLocal, primaryCurrency);
+      console.log(`Set TOTAL Amount (Local) cell to: ${totalLocalCell.value}`);
+    }
+
+    if (amountReimbursedColIndex >= 0) {
+      const totalReimbursedCell = worksheet.getCell(totalRowIndex, amountReimbursedColIndex);
+      // Always format reimbursed amount as SGD
+      totalReimbursedCell.value = formatCurrencyValue(sumReimbursed, 'SGD');
+      console.log(`Set TOTAL Amount (Reimbursed) cell to: ${totalReimbursedCell.value}`);
+    }
+  }
 
   // Generate the output buffer
   const buffer = await workbook.xlsx.writeBuffer();
