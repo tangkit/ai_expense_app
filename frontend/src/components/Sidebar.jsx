@@ -66,8 +66,15 @@ export default function Sidebar() {
     }
 
     const filename = exportToExcel(expenses, 'expense_report', claimInfo, companyTemplate);
-    const templateNote = companyTemplate ? `\n*Exported using your company template: ${companyTemplate.name}*` : '';
-    addBotMessage(`✅ Expense report exported successfully!\n\nFile: **${filename}**\n\nThe spreadsheet includes:\n• Summary sheet with all ${expenses.length} expenses\n• Hotel itemization details (if applicable)\n• Meal companion information (if applicable)${templateNote}`);
+
+    let templateNote = '';
+    if (companyTemplate && companyTemplate.fileContent) {
+      templateNote = `\n\n*✅ Populated your original company template: ${companyTemplate.name}*`;
+    } else if (companyTemplate) {
+      templateNote = `\n\n*⚠️ Using template column structure only. Please re-upload your template for direct population.*`;
+    }
+
+    addBotMessage(`✅ Expense report exported successfully!\n\nFile: **${filename}**\n\nThe spreadsheet includes:\n• ${expenses.length} expense(s)${templateNote}`);
   };
 
   const handleExportCSV = () => {
@@ -158,6 +165,12 @@ export default function Sidebar() {
         <div className="template-indicator">
           <FileText size={14} />
           <span>Using: {companyTemplate.name}</span>
+          {!companyTemplate.fileContent && (
+            <div className="template-warning">
+              <AlertTriangle size={12} />
+              <span>Please re-upload template for direct population</span>
+            </div>
+          )}
         </div>
       )}
 

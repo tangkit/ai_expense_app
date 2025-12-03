@@ -315,12 +315,20 @@ function populateOriginalTemplate(expenses, companyTemplate) {
  * Export expenses to Excel spreadsheet matching company template
  */
 export function exportToExcel(expenses, filename = 'expense_report', claimInfo = null, companyTemplate = null) {
+  console.log('=== exportToExcel called ===');
+  console.log('Expenses count:', expenses.length);
+  console.log('Company template:', companyTemplate);
+  console.log('Has fileContent:', companyTemplate?.fileContent ? 'YES (length: ' + companyTemplate.fileContent.length + ')' : 'NO');
+  console.log('Has columns:', companyTemplate?.columns ? 'YES (' + companyTemplate.columns.length + ' columns)' : 'NO');
+
   let workbook;
 
   // If company template exists with original file content, populate it directly
   if (companyTemplate && companyTemplate.fileContent && companyTemplate.columns && companyTemplate.columns.length > 0) {
+    console.log('>>> Using populateOriginalTemplate - filling original template directly');
     workbook = populateOriginalTemplate(expenses, companyTemplate);
   } else if (companyTemplate && companyTemplate.columns && companyTemplate.columns.length > 0) {
+    console.log('>>> Using createTemplateBasedSheet - template has columns but NO fileContent (need to re-upload template)');
     // Fallback: use column structure without original file
     workbook = XLSX.utils.book_new();
     const templateData = createTemplateBasedSheet(expenses, companyTemplate);
@@ -328,6 +336,7 @@ export function exportToExcel(expenses, filename = 'expense_report', claimInfo =
     styleSheet(templateSheet, templateData);
     XLSX.utils.book_append_sheet(workbook, templateSheet, 'Expense Report');
   } else {
+    console.log('>>> Using default format - no template');
     // Default: Main expense summary sheet
     workbook = XLSX.utils.book_new();
     const summaryData = createSummarySheet(expenses);
