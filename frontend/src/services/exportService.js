@@ -264,62 +264,76 @@ function getCurrencyFormat(currencyCode) {
 }
 
 /**
- * Fetch exchange rate from Alpha Vantage API
- * Returns the exchange rate from sourceCurrency to SGD
+ * Fetch exchange rates from backend API
+ * Backend handles Alpha Vantage API calls securely
  */
-async function getExchangeRate(sourceCurrency) {
-  // If already SGD, no conversion needed
-  if (!sourceCurrency || sourceCurrency.toUpperCase() === 'SGD') {
-    return 1;
+async function fetchExchangeRates(currencies) {
+  // Filter out SGD and get unique currencies
+  const uniqueCurrencies = [...new Set(
+    currencies
+      .map(c => c?.toUpperCase())
+      .filter(c => c && c !== 'SGD')
+  )];
+
+  if (uniqueCurrencies.length === 0) {
+    return { SGD: 1 };
   }
 
   try {
-    // Try to fetch from Alpha Vantage API
-    const apiKey = import.meta.env.VITE_ALPHAVANTAGE_API_KEY || 'demo';
-    const url = `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=${sourceCurrency}&to_currency=SGD&apikey=${apiKey}`;
+    const response = await fetch('/api/v1/currency/rates/bulk', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        currencies: uniqueCurrencies,
+        to_currency: 'SGD',
+      }),
+    });
 
-    const response = await fetch(url);
-    const data = await response.json();
-
-    if (data['Realtime Currency Exchange Rate']) {
-      const rate = parseFloat(data['Realtime Currency Exchange Rate']['5. Exchange Rate']);
-      console.log(`Exchange rate ${sourceCurrency} to SGD: ${rate}`);
-      return rate;
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Exchange rates from backend:', data);
+      return { SGD: 1, ...data.rates };
     }
 
-    // Fallback rates if API fails (approximate rates as of 2024)
-    console.warn(`Alpha Vantage API failed, using fallback rate for ${sourceCurrency}`);
-    return getFallbackExchangeRate(sourceCurrency);
+    console.warn('Backend currency API failed, using fallback rates');
+    return getFallbackRates(uniqueCurrencies);
   } catch (error) {
-    console.error('Error fetching exchange rate:', error);
-    return getFallbackExchangeRate(sourceCurrency);
+    console.error('Error fetching exchange rates:', error);
+    return getFallbackRates(uniqueCurrencies);
   }
 }
 
 /**
- * Fallback exchange rates to SGD (approximate)
+ * Get fallback exchange rates to SGD (used when backend is unavailable)
  */
-function getFallbackExchangeRate(currency) {
+function getFallbackRates(currencies) {
   const fallbackRates = {
-    'MYR': 0.29,   // 1 MYR ≈ 0.29 SGD
-    'USD': 1.35,   // 1 USD ≈ 1.35 SGD
-    'EUR': 1.45,   // 1 EUR ≈ 1.45 SGD
-    'GBP': 1.70,   // 1 GBP ≈ 1.70 SGD
-    'JPY': 0.009,  // 1 JPY ≈ 0.009 SGD
-    'CNY': 0.19,   // 1 CNY ≈ 0.19 SGD
-    'THB': 0.039,  // 1 THB ≈ 0.039 SGD
-    'IDR': 0.000085, // 1 IDR ≈ 0.000085 SGD
-    'PHP': 0.024,  // 1 PHP ≈ 0.024 SGD
-    'VND': 0.000054, // 1 VND ≈ 0.000054 SGD
-    'KRW': 0.00098, // 1 KRW ≈ 0.00098 SGD
-    'INR': 0.016,  // 1 INR ≈ 0.016 SGD
-    'AUD': 0.88,   // 1 AUD ≈ 0.88 SGD
-    'NZD': 0.81,   // 1 NZD ≈ 0.81 SGD
-    'HKD': 0.17,   // 1 HKD ≈ 0.17 SGD
-    'TWD': 0.042,  // 1 TWD ≈ 0.042 SGD
+    'MYR': 0.29,
+    'USD': 1.35,
+    'EUR': 1.45,
+    'GBP': 1.70,
+    'JPY': 0.009,
+    'CNY': 0.19,
+    'THB': 0.039,
+    'IDR': 0.000085,
+    'PHP': 0.024,
+    'VND': 0.000054,
+    'KRW': 0.00098,
+    'INR': 0.016,
+    'AUD': 0.88,
+    'NZD': 0.81,
+    'HKD': 0.17,
+    'TWD': 0.042,
+    'SGD': 1,
   };
 
-  return fallbackRates[currency?.toUpperCase()] || 1;
+  const rates = { SGD: 1 };
+  currencies.forEach(currency => {
+    rates[currency] = fallbackRates[currency] || 1;
+  });
+  return rates;
 }
 
 /**
@@ -577,15 +591,12 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
     console.warn(`Warning: Only ${maxDataRows} rows available, but ${expandedExpenses.length} rows to insert`);
   }
 
-  // Collect unique currencies and fetch exchange rates
-  const uniqueCurrencies = [...new Set(expandedExpenses.map(e => e.currency?.toUpperCase()).filter(Boolean))];
-  console.log('Unique currencies found:', uniqueCurrencies);
+  // Collect unique currencies and fetch exchange rates from backend
+  const currencyList = expandedExpenses.map(e => e.currency).filter(Boolean);
+  console.log('Currencies found:', currencyList);
 
-  const exchangeRates = {};
-  for (const currency of uniqueCurrencies) {
-    exchangeRates[currency] = await getExchangeRate(currency);
-    console.log(`Exchange rate for ${currency}: ${exchangeRates[currency]}`);
-  }
+  const exchangeRates = await fetchExchangeRates(currencyList);
+  console.log('Exchange rates:', exchangeRates);
 
   for (let expenseIndex = 0; expenseIndex < rowsToInsert; expenseIndex++) {
     const expense = expandedExpenses[expenseIndex];
