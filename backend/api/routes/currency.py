@@ -1,10 +1,10 @@
 """Currency conversion API routes."""
 
-import os
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import Dict, Optional
+from config import settings
 
 router = APIRouter()
 
@@ -68,7 +68,7 @@ async def get_exchange_rate(from_currency: str, to_currency: str = "SGD") -> Exc
         )
 
     # Try Alpha Vantage API
-    api_key = os.getenv("ALPHAVANTAGE_API_KEY")
+    api_key = settings.alphavantage_api_key
 
     if api_key and api_key != "your-alphavantage-api-key-here":
         try:
@@ -109,11 +109,11 @@ async def get_bulk_exchange_rates(request: BulkExchangeRateRequest) -> BulkExcha
     rates = {}
     source = "fallback"
 
-    api_key = os.getenv("ALPHAVANTAGE_API_KEY")
+    api_key = settings.alphavantage_api_key
     use_api = api_key and api_key != "your-alphavantage-api-key-here"
 
     # Debug logging
-    print(f"[Currency API] ALPHAVANTAGE_API_KEY exists: {bool(api_key)}")
+    print(f"[Currency API] ALPHAVANTAGE_API_KEY from settings: '{api_key[:10]}...' (length: {len(api_key)})" if api_key else "[Currency API] ALPHAVANTAGE_API_KEY is empty")
     print(f"[Currency API] API key is placeholder: {api_key == 'your-alphavantage-api-key-here' if api_key else 'N/A'}")
     print(f"[Currency API] use_api: {use_api}")
     print(f"[Currency API] Requested currencies: {request.currencies}")
