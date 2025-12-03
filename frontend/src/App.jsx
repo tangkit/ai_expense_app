@@ -1,7 +1,7 @@
-import React from 'react';
-import { ExpenseProvider } from './context/ExpenseContext';
-import { ChatInterface, Sidebar } from './components';
-import './App.css';
+import React from "react";
+import { ExpenseProvider } from "./context/ExpenseContext";
+import { ChatInterface, Sidebar } from "./components";
+import "./App.css";
 
 function App() {
   return (
@@ -9,10 +9,10 @@ function App() {
       <div className="app">
         <header className="app-header">
           <div className="logo">
-            <span className="logo-icon">💼</span>
-            <h1>Expense Claim Assistant</h1>
+            <span className="logo-icon"></span>
+            <h1>TANG's EXPENSE CLAIM AGENT</h1>
           </div>
-          <p className="tagline">AI-powered receipt processing for your business trips</p>
+          <h2>Intelligent Expense Filing for Your Business Trips</h2>
         </header>
 
         <main className="app-main">
@@ -25,7 +25,7 @@ function App() {
         </main>
 
         <footer className="app-footer">
-          <p>Upload receipts • Auto-extract data • Export to spreadsheet</p>
+          <h2>Upload Receipts • Auto-File • Export</h2>
         </footer>
       </div>
     </ExpenseProvider>
