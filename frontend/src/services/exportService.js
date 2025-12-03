@@ -222,48 +222,157 @@ function getFieldValue(expense, fieldName) {
 }
 
 /**
+ * Populate the original company template with expense data
+ * Preserves original formatting and structure
+ */
+function populateOriginalTemplate(expenses, companyTemplate) {
+  console.log('=== Populating Original Template ===');
+  console.log('Template name:', companyTemplate.name);
+  console.log('Header row index:', companyTemplate.headerRowIndex);
+  console.log('Columns:', companyTemplate.columns);
+
+  // Decode base64 content back to ArrayBuffer
+  const binaryString = atob(companyTemplate.fileContent);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  // Load the original template workbook
+  const workbook = XLSX.read(bytes.buffer, { type: 'array', cellStyles: true });
+
+  // Get the first sheet
+  const firstSheetName = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[firstSheetName];
+
+  console.log('First sheet name:', firstSheetName);
+
+  // Determine the header row (0-indexed for xlsx)
+  const headerRowIndex = companyTemplate.headerRowIndex || 0;
+  const dataStartRow = headerRowIndex + 2; // 1-indexed for xlsx (header is at headerRowIndex+1)
+
+  // Get the range of the worksheet
+  const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+
+  // Build column mapping: column letter -> expense field
+  const columnMapping = {};
+  companyTemplate.columns.forEach((colName, index) => {
+    const colLetter = XLSX.utils.encode_col(index);
+    columnMapping[colLetter] = colName;
+  });
+
+  console.log('Column mapping:', columnMapping);
+
+  // Clear any existing data rows (below header) while preserving header and above
+  const keysToDelete = [];
+  for (const key of Object.keys(worksheet)) {
+    if (key.startsWith('!')) continue; // Skip metadata keys
+    const cellRef = XLSX.utils.decode_cell(key);
+    if (cellRef.r > headerRowIndex) {
+      keysToDelete.push(key);
+    }
+  }
+  keysToDelete.forEach(key => delete worksheet[key]);
+
+  // Insert expense data rows
+  expenses.forEach((expense, expenseIndex) => {
+    const rowNum = dataStartRow + expenseIndex; // 1-indexed row number for xlsx
+
+    companyTemplate.columns.forEach((colName, colIndex) => {
+      const colLetter = XLSX.utils.encode_col(colIndex);
+      const cellAddress = `${colLetter}${rowNum}`;
+
+      // Get the value for this column
+      const value = getExpenseValueForColumn(expense, colName);
+
+      // Set cell value
+      if (value !== '' && value !== null && value !== undefined) {
+        // Determine cell type
+        if (typeof value === 'number') {
+          worksheet[cellAddress] = { t: 'n', v: value };
+        } else {
+          worksheet[cellAddress] = { t: 's', v: String(value) };
+        }
+      }
+    });
+  });
+
+  // Update the worksheet range to include new data
+  const newEndRow = dataStartRow + expenses.length - 1;
+  const newEndCol = companyTemplate.columns.length - 1;
+  worksheet['!ref'] = XLSX.utils.encode_range({
+    s: { r: 0, c: 0 },
+    e: { r: Math.max(newEndRow - 1, range.e.r), c: Math.max(newEndCol, range.e.c) }
+  });
+
+  console.log('Updated worksheet range:', worksheet['!ref']);
+  console.log('Populated', expenses.length, 'expense rows starting at row', dataStartRow);
+
+  return workbook;
+}
+
+/**
  * Export expenses to Excel spreadsheet matching company template
  */
 export function exportToExcel(expenses, filename = 'expense_report', claimInfo = null, companyTemplate = null) {
-  const workbook = XLSX.utils.book_new();
+  let workbook;
 
-  // If company template exists, use its column structure
-  if (companyTemplate && companyTemplate.columns && companyTemplate.columns.length > 0) {
+  // If company template exists with original file content, populate it directly
+  if (companyTemplate && companyTemplate.fileContent && companyTemplate.columns && companyTemplate.columns.length > 0) {
+    workbook = populateOriginalTemplate(expenses, companyTemplate);
+  } else if (companyTemplate && companyTemplate.columns && companyTemplate.columns.length > 0) {
+    // Fallback: use column structure without original file
+    workbook = XLSX.utils.book_new();
     const templateData = createTemplateBasedSheet(expenses, companyTemplate);
     const templateSheet = XLSX.utils.json_to_sheet(templateData, { header: companyTemplate.columns });
     styleSheet(templateSheet, templateData);
     XLSX.utils.book_append_sheet(workbook, templateSheet, 'Expense Report');
   } else {
-    // Main expense summary sheet (default format)
+    // Default: Main expense summary sheet
+    workbook = XLSX.utils.book_new();
     const summaryData = createSummarySheet(expenses);
     const summarySheet = XLSX.utils.json_to_sheet(summaryData);
     styleSheet(summarySheet, summaryData);
     XLSX.utils.book_append_sheet(workbook, summarySheet, 'Expense Summary');
   }
 
-  // Hotel itemization sheet (if any hotel expenses)
-  const hotelExpenses = expenses.filter(e => e.category === EXPENSE_CATEGORIES.HOTEL);
-  if (hotelExpenses.length > 0) {
-    const hotelData = createHotelItemizationSheet(hotelExpenses);
-    const hotelSheet = XLSX.utils.json_to_sheet(hotelData);
-    styleSheet(hotelSheet, hotelData);
-    XLSX.utils.book_append_sheet(workbook, hotelSheet, 'Hotel Itemization');
-  }
+  // Only add additional sheets if NOT using original template directly
+  // (to preserve the original template structure)
+  const usingOriginalTemplate = companyTemplate && companyTemplate.fileContent;
 
-  // Meals with companions sheet (if any meals over $25)
-  const mealsWithCompanions = expenses.filter(
-    e => e.category === EXPENSE_CATEGORIES.MEAL && e.total > 25
-  );
-  if (mealsWithCompanions.length > 0) {
-    const mealsData = createMealsCompanionSheet(mealsWithCompanions);
-    const mealsSheet = XLSX.utils.json_to_sheet(mealsData);
-    styleSheet(mealsSheet, mealsData);
-    XLSX.utils.book_append_sheet(workbook, mealsSheet, 'Meals Entertainment');
+  if (!usingOriginalTemplate) {
+    // Hotel itemization sheet (if any hotel expenses)
+    const hotelExpenses = expenses.filter(e => e.category === EXPENSE_CATEGORIES.HOTEL);
+    if (hotelExpenses.length > 0) {
+      const hotelData = createHotelItemizationSheet(hotelExpenses);
+      const hotelSheet = XLSX.utils.json_to_sheet(hotelData);
+      styleSheet(hotelSheet, hotelData);
+      XLSX.utils.book_append_sheet(workbook, hotelSheet, 'Hotel Itemization');
+    }
+
+    // Meals with companions sheet (if any meals over $25)
+    const mealsWithCompanions = expenses.filter(
+      e => e.category === EXPENSE_CATEGORIES.MEAL && e.total > 25
+    );
+    if (mealsWithCompanions.length > 0) {
+      const mealsData = createMealsCompanionSheet(mealsWithCompanions);
+      const mealsSheet = XLSX.utils.json_to_sheet(mealsData);
+      styleSheet(mealsSheet, mealsData);
+      XLSX.utils.book_append_sheet(workbook, mealsSheet, 'Meals Entertainment');
+    }
   }
 
   // Generate filename with date
   const dateStr = format(new Date(), 'yyyy-MM-dd');
-  const fullFilename = `${filename}_${dateStr}.xlsx`;
+  let fullFilename;
+
+  if (usingOriginalTemplate) {
+    // Use original template name (without extension) + date
+    const templateBaseName = companyTemplate.name.replace(/\.[^/.]+$/, ''); // Remove extension
+    fullFilename = `${templateBaseName}_filled_${dateStr}.xlsx`;
+  } else {
+    fullFilename = `${filename}_${dateStr}.xlsx`;
+  }
 
   // Write and download
   XLSX.writeFile(workbook, fullFilename);
