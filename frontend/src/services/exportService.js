@@ -520,7 +520,9 @@ function populateClaimInfoFields(worksheet, headerRow, totalRows, claimInfo) {
     { patterns: ['department', 'dept', 'division'], field: 'department', label: 'Department' },
     { patterns: ['expense title', 'claim title', 'report title', 'title of expense'], field: 'expenseTitle', label: 'Expense Title' },
     { patterns: ['purpose', 'business purpose', 'trip purpose', 'reason'], field: 'businessPurpose', label: 'Business Purpose' },
-    { patterns: ['submission date', 'date submitted', 'claim date'], field: 'submissionDate', label: 'Submission Date' },
+    { patterns: ['submission date', 'date submitted', 'claim date', 'date:'], field: 'submissionDate', label: 'Submission Date' },
+    { patterns: ['manager', 'approver', 'approved by', 'supervisor', 'reporting to'], field: 'approverName', label: 'Approver Name' },
+    { patterns: ['approver title', "approver's title", "manager's title", 'approving officer'], field: 'approverTitle', label: 'Approver Title' },
   ];
 
   // Scan header section (rows before the data header)

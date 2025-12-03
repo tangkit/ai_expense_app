@@ -79,7 +79,10 @@ const getInitialState = () => {
       employeeName: '',
       jobPosition: '',
       department: '',
-      submissionDate: new Date().toISOString().split('T')[0]
+      submissionDate: new Date().toISOString().split('T')[0],
+      // Approval info
+      approverName: '',
+      approverTitle: ''
     },
     companyTemplate: persisted?.companyTemplate || null,
     uploadedReceipts: persisted?.uploadedReceipts || [], // Store receipt files as base64

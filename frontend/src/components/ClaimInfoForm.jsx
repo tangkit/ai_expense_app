@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { FileText, X, Save, Briefcase, User, Building, Calendar, BadgeCheck } from 'lucide-react';
+import { FileText, X, Save, Briefcase, User, Building, Calendar, BadgeCheck, UserCheck } from 'lucide-react';
 import { useExpense } from '../context/ExpenseContext';
 
 /**
@@ -168,6 +168,40 @@ export default function ClaimInfoForm({ onSave, onCancel }) {
               value={claimInfo.submissionDate || new Date().toISOString().split('T')[0]}
               onChange={(e) => handleChange('submissionDate', e.target.value)}
             />
+          </div>
+        </div>
+
+        {/* Approval Section */}
+        <div className="form-section">
+          <h4>Approval Information</h4>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label>
+                <UserCheck size={16} />
+                Manager/Approver Name *
+              </label>
+              <input
+                type="text"
+                value={claimInfo.approverName || ''}
+                onChange={(e) => handleChange('approverName', e.target.value)}
+                placeholder="Your manager's name"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>
+                <BadgeCheck size={16} />
+                Approver's Title
+              </label>
+              <input
+                type="text"
+                value={claimInfo.approverTitle || ''}
+                onChange={(e) => handleChange('approverTitle', e.target.value)}
+                placeholder="e.g., Director, VP of Sales"
+              />
+            </div>
           </div>
         </div>
 

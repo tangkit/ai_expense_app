@@ -33,7 +33,7 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
     total: 0,
     currency: 'SGD',  // Default to SGD (Singapore Dollar)
     receiptNumber: '',
-    paymentMethod: '',
+    paymentMethod: 'Personal Card',  // Default to Personal Card
     description: '',
     businessPurpose: '',
     projectCode: '',
@@ -308,9 +308,8 @@ export default function ExpenseForm({ expense, onSave, onCancel }) {
               value={formData.paymentMethod}
               onChange={(e) => handleChange('paymentMethod', e.target.value)}
             >
-              <option value="">Select...</option>
-              <option value="Corporate Card">Corporate Card</option>
               <option value="Personal Card">Personal Card</option>
+              <option value="Corporate Card">Corporate Card</option>
               <option value="Cash">Cash</option>
               <option value="App Payment">App Payment</option>
               <option value="Wire Transfer">Wire Transfer</option>
