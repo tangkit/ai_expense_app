@@ -163,36 +163,49 @@ export function resetBackendCache() {
 }
 
 /**
+ * Round a number to 2 decimal places
+ */
+function roundTo2Decimals(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+/**
  * Transform a single expense from backend to frontend format
  */
 function transformSingleExpense(expense, file, rawText) {
   // Transform hotel itemization
   let hotelItemization = null;
   if (expense.hotel_itemization && expense.hotel_itemization.length > 0) {
-    hotelItemization = expense.hotel_itemization.map(night => ({
-      id: uuidv4(),
-      nightDate: night.night_date,
-      roomRate: parseFloat(night.room_rate),
-      roomTax: parseFloat(night.room_tax),
-      serviceCharge: parseFloat(night.service_charge),
-      resortFee: parseFloat(night.resort_fee),
-      parkingFee: parseFloat(night.parking_fee),
-      otherFees: parseFloat(night.other_fees),
-      dailyTotal: parseFloat(night.room_rate) + parseFloat(night.room_tax) +
-                  parseFloat(night.service_charge) + parseFloat(night.resort_fee) +
-                  parseFloat(night.parking_fee) + parseFloat(night.other_fees)
-    }));
+    hotelItemization = expense.hotel_itemization.map(night => {
+      const roomRate = roundTo2Decimals(night.room_rate);
+      const roomTax = roundTo2Decimals(night.room_tax);
+      const serviceCharge = roundTo2Decimals(night.service_charge);
+      const resortFee = roundTo2Decimals(night.resort_fee);
+      const parkingFee = roundTo2Decimals(night.parking_fee);
+      const otherFees = roundTo2Decimals(night.other_fees);
+      return {
+        id: uuidv4(),
+        nightDate: night.night_date,
+        roomRate,
+        roomTax,
+        serviceCharge,
+        resortFee,
+        parkingFee,
+        otherFees,
+        dailyTotal: roundTo2Decimals(roomRate + roomTax + serviceCharge + resortFee + parkingFee + otherFees)
+      };
+    });
   }
 
   // Build currency conversion info
   const currencyConversion = expense.original_currency && expense.original_currency !== expense.currency ? {
     originalCurrency: expense.original_currency,
-    originalAmount: parseFloat(expense.original_amount),
-    exchangeRate: parseFloat(expense.exchange_rate),
+    originalAmount: roundTo2Decimals(expense.original_amount),
+    exchangeRate: roundTo2Decimals(expense.exchange_rate),
     exchangeRateSource: expense.exchange_rate_source || 'OANDA',
     exchangeRateDate: expense.exchange_rate_date,
     convertedCurrency: expense.currency,
-    convertedAmount: parseFloat(expense.total)
+    convertedAmount: roundTo2Decimals(expense.total)
   } : null;
 
   // Build flight info
@@ -219,9 +232,9 @@ function transformSingleExpense(expense, file, rawText) {
       date: expense.expense_date,
       checkInDate: expense.check_in_date,
       checkOutDate: expense.check_out_date,
-      amount: parseFloat(expense.subtotal),
-      tax: parseFloat(expense.tax),
-      total: parseFloat(expense.total),
+      amount: roundTo2Decimals(expense.subtotal),
+      tax: roundTo2Decimals(expense.tax),
+      total: roundTo2Decimals(expense.total),
       currency: expense.currency || 'USD',
       receiptNumber: expense.receipt_number || '',
       paymentMethod: expense.payment_method || '',

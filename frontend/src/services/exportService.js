@@ -167,6 +167,13 @@ function getExpenseValueForColumn(expense, columnName) {
 }
 
 /**
+ * Round a number to 2 decimal places
+ */
+function roundTo2Decimals(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+/**
  * Get field value from expense object
  */
 function getFieldValue(expense, fieldName) {
@@ -180,11 +187,11 @@ function getFieldValue(expense, fieldName) {
     case 'description':
       return expense.description || '';
     case 'amount':
-      return expense.amount || expense.subtotal || 0;
+      return roundTo2Decimals(expense.amount || expense.subtotal || 0);
     case 'tax':
-      return expense.tax || 0;
+      return roundTo2Decimals(expense.tax || 0);
     case 'total':
-      return expense.total || 0;
+      return roundTo2Decimals(expense.total || 0);
     case 'currency':
       return expense.currency || 'USD';
     case 'paymentMethod':
@@ -248,11 +255,11 @@ const CURRENCY_FORMATS = {
 };
 
 /**
- * Format amount with currency symbol
+ * Format amount with currency symbol (always 2 decimal places)
  */
 function formatCurrencyValue(amount, currencyCode) {
   const currency = CURRENCY_FORMATS[currencyCode?.toUpperCase()] || CURRENCY_FORMATS['USD'];
-  return `${currency.symbol}${Number(amount).toFixed(2)}`;
+  return `${currency.symbol}${roundTo2Decimals(amount).toFixed(2)}`;
 }
 
 /**
@@ -363,8 +370,8 @@ function expandExpensesForExport(expenses) {
               ...expense,
               date: night.nightDate || expense.date,
               description: `${expense.vendor} - ${nightLabel}: Room Charges`,
-              amount: night.roomRate,
-              total: night.roomRate,
+              amount: roundTo2Decimals(night.roomRate),
+              total: roundTo2Decimals(night.roomRate),
               isHotelNight: true,
               chargeType: 'room'
             });
@@ -376,8 +383,8 @@ function expandExpensesForExport(expenses) {
               ...expense,
               date: night.nightDate || expense.date,
               description: `${expense.vendor} - ${nightLabel}: Service Charges`,
-              amount: night.serviceCharge,
-              total: night.serviceCharge,
+              amount: roundTo2Decimals(night.serviceCharge),
+              total: roundTo2Decimals(night.serviceCharge),
               isHotelNight: true,
               chargeType: 'service'
             });
@@ -389,8 +396,8 @@ function expandExpensesForExport(expenses) {
               ...expense,
               date: night.nightDate || expense.date,
               description: `${expense.vendor} - ${nightLabel}: Taxes`,
-              amount: night.roomTax,
-              total: night.roomTax,
+              amount: roundTo2Decimals(night.roomTax),
+              total: roundTo2Decimals(night.roomTax),
               isHotelNight: true,
               chargeType: 'tax'
             });
@@ -402,8 +409,8 @@ function expandExpensesForExport(expenses) {
               ...expense,
               date: night.nightDate || expense.date,
               description: `${expense.vendor} - ${nightLabel}: Resort Fee`,
-              amount: night.resortFee,
-              total: night.resortFee,
+              amount: roundTo2Decimals(night.resortFee),
+              total: roundTo2Decimals(night.resortFee),
               isHotelNight: true,
               chargeType: 'resort'
             });
@@ -415,8 +422,8 @@ function expandExpensesForExport(expenses) {
               ...expense,
               date: night.nightDate || expense.date,
               description: `${expense.vendor} - ${nightLabel}: Parking Fee`,
-              amount: night.parkingFee,
-              total: night.parkingFee,
+              amount: roundTo2Decimals(night.parkingFee),
+              total: roundTo2Decimals(night.parkingFee),
               isHotelNight: true,
               chargeType: 'parking'
             });
@@ -428,8 +435,8 @@ function expandExpensesForExport(expenses) {
               ...expense,
               date: night.nightDate || expense.date,
               description: `${expense.vendor} - ${nightLabel}: Other Fees`,
-              amount: night.otherFees,
-              total: night.otherFees,
+              amount: roundTo2Decimals(night.otherFees),
+              total: roundTo2Decimals(night.otherFees),
               isHotelNight: true,
               chargeType: 'other'
             });
@@ -440,8 +447,8 @@ function expandExpensesForExport(expenses) {
             ...expense,
             date: night.nightDate || expense.date,
             description: `${expense.vendor} - ${nightLabel}: Accommodation`,
-            amount: night.roomRate || night.dailyTotal || 0,
-            total: night.dailyTotal || night.roomRate || 0,
+            amount: roundTo2Decimals(night.roomRate || night.dailyTotal || 0),
+            total: roundTo2Decimals(night.dailyTotal || night.roomRate || 0),
             isHotelNight: true,
             chargeType: 'accommodation'
           });
@@ -947,7 +954,16 @@ export function generateReportSummary(expenses) {
     }
   });
 
-  summary.totalAmount = Math.round(summary.totalAmount * 100) / 100;
+  // Round all totals to 2 decimal places
+  summary.totalAmount = roundTo2Decimals(summary.totalAmount);
+
+  Object.keys(summary.byCategory).forEach(category => {
+    summary.byCategory[category].total = roundTo2Decimals(summary.byCategory[category].total);
+  });
+
+  Object.keys(summary.byDate).forEach(date => {
+    summary.byDate[date].total = roundTo2Decimals(summary.byDate[date].total);
+  });
 
   return summary;
 }
