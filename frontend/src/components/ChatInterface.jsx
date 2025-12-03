@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Paperclip, Bot, User, Loader2, Upload, FileText } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useExpense } from '../context/ExpenseContext';
 import FileUpload, { isTemplateFile } from './FileUpload';
 import ExpenseCard from './ExpenseCard';
@@ -451,55 +452,60 @@ async function fileToBase64(file) {
   });
 }
 
-// Parse template file to extract structure
+// Parse template file to extract structure using xlsx library
 async function parseTemplateFile(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
     reader.onload = (event) => {
       try {
-        const content = event.target.result;
+        const data = event.target.result;
         let columns = [];
+        let sheetData = [];
 
         if (file.name.toLowerCase().endsWith('.csv')) {
           // Parse CSV
-          const lines = content.split('\n');
+          const text = new TextDecoder().decode(data);
+          const lines = text.split('\n');
           if (lines.length > 0) {
             columns = lines[0].split(',').map(col => col.trim().replace(/"/g, ''));
           }
         } else {
-          // For Excel files, detect common expense template columns
-          columns = [
-            'Date',
-            'Vendor/Merchant',
-            'Description',
-            'Category',
-            'Amount',
-            'Tax',
-            'Total',
-            'Currency',
-            'Payment Method',
-            'Receipt Attached',
-            'Business Purpose',
-            'Project/Cost Center',
-            'Companion Name',
-            'Notes'
-          ];
+          // Parse Excel file using xlsx library
+          const workbook = XLSX.read(data, { type: 'array' });
+
+          // Get the first sheet
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+
+          // Convert to JSON to get data
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+          if (jsonData.length > 0) {
+            // First row is typically headers
+            columns = jsonData[0].map(col => String(col || '').trim());
+
+            // Store additional rows as sample data
+            if (jsonData.length > 1) {
+              sheetData = jsonData.slice(1, 6); // Get first 5 data rows as sample
+            }
+          }
         }
 
         // Filter out empty columns
         columns = columns.filter(col => col && col.length > 0);
 
         if (columns.length === 0) {
-          reject(new Error('Could not detect columns in the template'));
+          reject(new Error('Could not detect columns in the template. Make sure the first row contains column headers.'));
           return;
         }
 
         resolve({
           name: file.name,
           columns: columns,
+          sampleData: sheetData,
           uploadedAt: new Date().toISOString(),
-          fileType: file.type || 'application/octet-stream'
+          fileType: file.type || 'application/vnd.ms-excel'
         });
       } catch (err) {
         reject(new Error('Failed to parse template: ' + err.message));
@@ -508,33 +514,7 @@ async function parseTemplateFile(file) {
 
     reader.onerror = () => reject(new Error('Failed to read file'));
 
-    if (file.name.toLowerCase().endsWith('.csv')) {
-      reader.readAsText(file);
-    } else {
-      // For Excel files, use common patterns
-      setTimeout(() => {
-        resolve({
-          name: file.name,
-          columns: [
-            'Date',
-            'Vendor/Merchant',
-            'Description',
-            'Category',
-            'Amount',
-            'Tax',
-            'Total',
-            'Currency',
-            'Payment Method',
-            'Receipt Attached',
-            'Business Purpose',
-            'Project/Cost Center',
-            'Companion Name',
-            'Notes'
-          ],
-          uploadedAt: new Date().toISOString(),
-          fileType: file.type || 'application/vnd.ms-excel'
-        });
-      }, 300);
-    }
+    // Read as ArrayBuffer for xlsx library
+    reader.readAsArrayBuffer(file);
   });
 }
