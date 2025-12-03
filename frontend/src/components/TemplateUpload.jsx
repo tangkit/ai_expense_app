@@ -203,7 +203,12 @@ async function parseTemplateFile(file) {
         }
         const base64Content = btoa(binary);
 
-        resolve({
+        console.log('=== Template Storage ===');
+        console.log('File content length (bytes):', uint8Array.length);
+        console.log('Base64 content length:', base64Content.length);
+        console.log('Header row index:', headerRowIndex);
+
+        const templateData = {
           name: file.name,
           columns: columns,
           sampleData: sheetData,
@@ -212,7 +217,14 @@ async function parseTemplateFile(file) {
           // Store original file content for direct population during export
           fileContent: base64Content,
           headerRowIndex: headerRowIndex
+        };
+
+        console.log('Template data to store:', {
+          ...templateData,
+          fileContent: templateData.fileContent ? `[${templateData.fileContent.length} chars]` : 'MISSING'
         });
+
+        resolve(templateData);
       } catch (err) {
         console.error('Error parsing template:', err);
         reject(new Error('Failed to parse template: ' + err.message));
