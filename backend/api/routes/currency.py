@@ -112,6 +112,12 @@ async def get_bulk_exchange_rates(request: BulkExchangeRateRequest) -> BulkExcha
     api_key = os.getenv("ALPHAVANTAGE_API_KEY")
     use_api = api_key and api_key != "your-alphavantage-api-key-here"
 
+    # Debug logging
+    print(f"[Currency API] ALPHAVANTAGE_API_KEY exists: {bool(api_key)}")
+    print(f"[Currency API] API key is placeholder: {api_key == 'your-alphavantage-api-key-here' if api_key else 'N/A'}")
+    print(f"[Currency API] use_api: {use_api}")
+    print(f"[Currency API] Requested currencies: {request.currencies}")
+
     for currency in request.currencies:
         currency = currency.upper()
 
@@ -123,20 +129,31 @@ async def get_bulk_exchange_rates(request: BulkExchangeRateRequest) -> BulkExcha
             try:
                 async with httpx.AsyncClient() as client:
                     url = f"https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency={currency}&to_currency={request.to_currency}&apikey={api_key}"
+                    print(f"[Currency API] Fetching rate for {currency} -> {request.to_currency}")
                     response = await client.get(url, timeout=10.0)
                     data = response.json()
+                    print(f"[Currency API] Response for {currency}: {data}")
 
                     if "Realtime Currency Exchange Rate" in data:
                         rates[currency] = float(data["Realtime Currency Exchange Rate"]["5. Exchange Rate"])
                         source = "api"
+                        print(f"[Currency API] Got rate from API: {currency} = {rates[currency]}")
                         continue
+                    elif "Note" in data:
+                        # Alpha Vantage rate limit message
+                        print(f"[Currency API] Rate limit or error: {data.get('Note', 'Unknown error')}")
+                    elif "Error Message" in data:
+                        print(f"[Currency API] API Error: {data.get('Error Message')}")
             except Exception as e:
-                print(f"Alpha Vantage API error for {currency}: {e}")
+                print(f"[Currency API] Exception for {currency}: {type(e).__name__}: {e}")
 
         # Use fallback
         if currency in FALLBACK_RATES:
             rates[currency] = FALLBACK_RATES[currency]
+            print(f"[Currency API] Using fallback rate for {currency}: {rates[currency]}")
         else:
             rates[currency] = 1.0  # Default to 1 if unknown
+            print(f"[Currency API] Unknown currency {currency}, defaulting to 1.0")
 
+    print(f"[Currency API] Final source: {source}, rates: {rates}")
     return BulkExchangeRateResponse(rates=rates, source=source)
