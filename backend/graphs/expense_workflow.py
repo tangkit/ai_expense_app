@@ -3,12 +3,14 @@
 import json
 import base64
 import asyncio
+import io
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Annotated, TypedDict, Literal, Any
 
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, SystemMessage
+from PIL import Image
 
 from config import settings
 from services.exchange_rate import exchange_rate_service
@@ -100,33 +102,47 @@ def parse_receipt(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
             },
         ]
     elif file_type == "application/pdf":
-        # For PDFs, send as document (Claude and GPT-4 support PDF vision)
-        # Claude uses document type, OpenAI uses file type
-        if settings.llm_provider == "anthropic":
+        # Convert PDF to images using pdf2image for LangChain compatibility
+        try:
+            from pdf2image import convert_from_bytes
+
+            # Decode base64 PDF
+            pdf_bytes = base64.b64decode(file_content)
+
+            # Convert PDF pages to images
+            images = convert_from_bytes(pdf_bytes, dpi=150, first_page=1, last_page=3)  # First 3 pages max
+
+            # Build content with all pages as images
             content = [
                 {"type": "text", "text": RECEIPT_EXTRACTION_PROMPT.format(
-                    receipt_content=f"[See attached PDF document: {file_name}]"
-                )},
-                {
-                    "type": "document",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "application/pdf",
-                        "data": file_content,
-                    },
-                },
+                    receipt_content=f"[PDF document: {file_name} - {len(images)} page(s) converted to images]"
+                )}
             ]
-        else:
-            # For OpenAI, convert PDF to image or use file upload
-            # Fallback: send as base64 image URL (some models support this)
+
+            for idx, img in enumerate(images):
+                # Convert PIL image to base64 PNG
+                buffer = io.BytesIO()
+                img.save(buffer, format="PNG")
+                img_base64 = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+                content.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/png;base64,{img_base64}"},
+                })
+
+        except ImportError:
+            # pdf2image not available, try sending as-is
             content = [
                 {"type": "text", "text": RECEIPT_EXTRACTION_PROMPT.format(
-                    receipt_content=f"[See attached PDF document: {file_name}]"
+                    receipt_content=f"[PDF document: {file_name} - Unable to convert, please extract text]"
                 )},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:application/pdf;base64,{file_content}"},
-                },
+            ]
+        except Exception as e:
+            # PDF conversion failed
+            content = [
+                {"type": "text", "text": RECEIPT_EXTRACTION_PROMPT.format(
+                    receipt_content=f"[PDF document: {file_name} - Conversion error: {str(e)}]"
+                )},
             ]
     else:
         # For other types, just describe it
