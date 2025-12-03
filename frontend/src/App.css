@@ -4,8 +4,9 @@
 
 /* CSS Variables - Modern Dark Blue Theme */
 :root {
-  --primary-color: #3b82f6;
+  --primary-color: #225ebe;
   --primary-hover: #60a5fa;
+  --dark-blue-color: #2b1cb1;
   --primary-light: rgba(59, 130, 246, 0.15);
   --primary-glow: rgba(59, 130, 246, 0.3);
   --secondary-color: #8b5cf6;
@@ -13,8 +14,9 @@
   --warning-color: #f59e0b;
   --error-color: #ef4444;
   --background: #0f172a;
-  --background-secondary: #1e293b;
-  --surface: #1e293b;
+  --background-secondary: #3247ce;
+  --surface: #0a2756;
+  --sidebar-color: #352f72;
   --surface-secondary: #334155;
   --surface-hover: #475569;
   --text-primary: #f1f5f9;
@@ -47,7 +49,8 @@ body,
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
   background: var(--background);
   color: var(--text-primary);
   line-height: 1.5;
@@ -63,7 +66,7 @@ body {
 }
 
 .app-header {
-  background: linear-gradient(135deg, #0e4a6f 0%, #0d3b5c 50%, #0a2540 100%);
+  background: linear-gradient(135deg, #2a45cd 0%, #035fa1 50%, #0a2540 100%);
   border-bottom: 1px solid #1a5a7a;
   color: white;
   padding: 16px 24px;
@@ -111,7 +114,8 @@ body {
 .sidebar-panel {
   width: 380px;
   border-left: 1px solid var(--border-color);
-  background: var(--background-secondary);
+  background: 
+  var(--sidebar-color);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -203,7 +207,7 @@ body {
 }
 
 .message.user .message-content {
-  background: linear-gradient(135deg, var(--primary-color) 0%, #2563eb 100%);
+  background: linear-gradient(135deg, var(--teal-color) 100%, #032570 100%);
   color: white;
   border: none;
 }
@@ -459,7 +463,7 @@ body {
 }
 
 .upload-tips li::before {
-  content: '•';
+  content: "•";
   margin-right: 8px;
   color: var(--primary-color);
 }
@@ -1305,6 +1309,7 @@ body {
     width: 100%;
     border-left: none;
     border-top: 1px solid var(--border-color);
+    background: var(--background);
     max-height: 50vh;
   }
 
@@ -1562,7 +1567,7 @@ body {
 }
 
 .template-info li::before {
-  content: '•';
+  content: "•";
   margin-right: 8px;
   color: var(--primary-color);
 }
@@ -1652,7 +1657,11 @@ body {
    =================================== */
 .claim-info-summary {
   padding: 16px 20px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.1) 0%,
+    rgba(139, 92, 246, 0.1) 100%
+  );
   border-bottom: 1px solid var(--border-color);
 }
 
