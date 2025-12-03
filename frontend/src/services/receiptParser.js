@@ -176,16 +176,28 @@ function transformSingleExpense(expense, file, rawText) {
   // Transform hotel itemization
   let hotelItemization = null;
   if (expense.hotel_itemization && expense.hotel_itemization.length > 0) {
-    hotelItemization = expense.hotel_itemization.map(night => {
+    // Get check-in date as base for incrementing night dates if missing
+    const checkInDate = expense.check_in_date
+      ? new Date(expense.check_in_date)
+      : new Date(expense.expense_date || new Date());
+
+    hotelItemization = expense.hotel_itemization.map((night, index) => {
       const roomRate = roundTo2Decimals(night.room_rate);
       const roomTax = roundTo2Decimals(night.room_tax);
       const serviceCharge = roundTo2Decimals(night.service_charge);
       const resortFee = roundTo2Decimals(night.resort_fee);
       const parkingFee = roundTo2Decimals(night.parking_fee);
       const otherFees = roundTo2Decimals(night.other_fees);
+
+      // Use night_date from backend, or increment from check-in date if missing
+      let nightDate = night.night_date;
+      if (!nightDate) {
+        nightDate = format(addDays(checkInDate, index), 'yyyy-MM-dd');
+      }
+
       return {
         id: uuidv4(),
-        nightDate: night.night_date,
+        nightDate,
         roomRate,
         roomTax,
         serviceCharge,
