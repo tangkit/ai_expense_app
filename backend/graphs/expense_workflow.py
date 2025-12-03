@@ -580,6 +580,47 @@ def safe_decimal(value, default=0) -> Decimal:
         return Decimal(str(default))
 
 
+def safe_date(value, default=None) -> date | None:
+    """Safely convert a value to date, handling None/null and invalid formats."""
+    if value is None:
+        return default if default else date.today()
+
+    # If already a date object, return it
+    if isinstance(value, date):
+        return value
+
+    # If it's a string, try various formats
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return default if default else date.today()
+
+        # Try common date formats
+        formats = [
+            "%Y-%m-%d",      # 2024-01-15
+            "%d/%m/%Y",      # 15/01/2024
+            "%m/%d/%Y",      # 01/15/2024
+            "%d-%m-%Y",      # 15-01-2024
+            "%Y/%m/%d",      # 2024/01/15
+            "%d %b %Y",      # 15 Jan 2024
+            "%d %B %Y",      # 15 January 2024
+            "%b %d, %Y",     # Jan 15, 2024
+            "%B %d, %Y",     # January 15, 2024
+        ]
+
+        for fmt in formats:
+            try:
+                return datetime.strptime(value, fmt).date()
+            except ValueError:
+                continue
+
+        # If all formats fail, return default
+        return default if default else date.today()
+
+    # Unknown type, return default
+    return default if default else date.today()
+
+
 def build_expense_output(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     """Build the final ExtractedExpense output."""
     if state.get("error"):
@@ -589,19 +630,16 @@ def build_expense_output(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     category = state.get("category", "other")
 
     try:
-        # Parse dates
-        expense_date = extracted.get("expense_date", str(date.today()))
-        if isinstance(expense_date, str):
-            expense_date = datetime.strptime(expense_date, "%Y-%m-%d").date()
+        # Parse dates using safe_date helper
+        expense_date = safe_date(extracted.get("expense_date"), date.today())
 
         # Build hotel itemization if present
         hotel_items = None
         if state.get("hotel_itemization"):
             hotel_items = []
             for item in state["hotel_itemization"]:
-                night_date = item.get("night_date")
-                if isinstance(night_date, str):
-                    night_date = datetime.strptime(night_date, "%Y-%m-%d").date()
+                # Use expense_date as default for night_date if not available
+                night_date = safe_date(item.get("night_date"), expense_date)
 
                 hotel_items.append(
                     HotelNightItem(
@@ -615,28 +653,19 @@ def build_expense_output(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
                     )
                 )
 
-        # Parse check-in/check-out dates for hotels
+        # Parse check-in/check-out dates for hotels using safe_date
         check_in = None
         check_out = None
         if category == "hotel":
             if extracted.get("check_in_date"):
-                check_in = datetime.strptime(
-                    extracted["check_in_date"], "%Y-%m-%d"
-                ).date()
+                check_in = safe_date(extracted["check_in_date"])
             if extracted.get("check_out_date"):
-                check_out = datetime.strptime(
-                    extracted["check_out_date"], "%Y-%m-%d"
-                ).date()
+                check_out = safe_date(extracted["check_out_date"])
 
-        # Parse currency conversion dates
+        # Parse currency conversion dates using safe_date
         exchange_rate_date = None
         if extracted.get("exchange_rate_date"):
-            try:
-                exchange_rate_date = datetime.strptime(
-                    extracted["exchange_rate_date"], "%Y-%m-%d"
-                ).date()
-            except:
-                exchange_rate_date = date.today()
+            exchange_rate_date = safe_date(extracted["exchange_rate_date"], date.today())
 
         # Get subtotal, defaulting to total if not provided
         subtotal_val = extracted.get("subtotal")
