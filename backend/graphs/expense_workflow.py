@@ -595,10 +595,19 @@ def safe_decimal(value, default=0) -> Decimal:
         return Decimal(str(default))
 
 
-def safe_date(value, default=None) -> date | None:
-    """Safely convert a value to date, handling None/null and invalid formats."""
+def safe_date(value, default=None, fallback_to_today=True) -> date | None:
+    """Safely convert a value to date, handling None/null and invalid formats.
+
+    Args:
+        value: The value to convert to a date
+        default: Default value if conversion fails
+        fallback_to_today: If True and default is None, fallback to today's date.
+                          If False and default is None, return None for invalid values.
+    """
     if value is None:
-        return default if default else date.today()
+        if default is not None:
+            return default
+        return date.today() if fallback_to_today else None
 
     # If already a date object, return it
     if isinstance(value, date):
@@ -608,7 +617,9 @@ def safe_date(value, default=None) -> date | None:
     if isinstance(value, str):
         value = value.strip()
         if not value:
-            return default if default else date.today()
+            if default is not None:
+                return default
+            return date.today() if fallback_to_today else None
 
         # Try common date formats
         formats = [
@@ -629,11 +640,15 @@ def safe_date(value, default=None) -> date | None:
             except ValueError:
                 continue
 
-        # If all formats fail, return default
-        return default if default else date.today()
+        # If all formats fail, return default or None
+        if default is not None:
+            return default
+        return date.today() if fallback_to_today else None
 
-    # Unknown type, return default
-    return default if default else date.today()
+    # Unknown type, return default or None
+    if default is not None:
+        return default
+    return date.today() if fallback_to_today else None
 
 
 def build_single_expense(extracted: dict, hotel_itemization: list | None, confidence_score: float) -> ExtractedExpense:
@@ -656,8 +671,9 @@ def build_single_expense(extracted: dict, hotel_itemization: list | None, confid
     if hotel_itemization:
         hotel_items = []
         for idx, item in enumerate(hotel_itemization):
-            # Try to get the night_date, but if invalid, increment from check-in date
-            night_date = safe_date(item.get("night_date"), None)
+            # Try to get the night_date, but if invalid/missing, increment from check-in date
+            # Use fallback_to_today=False so invalid dates return None and trigger incrementing
+            night_date = safe_date(item.get("night_date"), None, fallback_to_today=False)
             if night_date is None:
                 # Increment from check-in date based on index
                 night_date = check_in_date + timedelta(days=idx)
@@ -676,8 +692,9 @@ def build_single_expense(extracted: dict, hotel_itemization: list | None, confid
         # Hotel nights from LLM extraction
         hotel_items = []
         for idx, item in enumerate(extracted["hotel_nights"]):
-            # Try to get the night_date, but if invalid, increment from check-in date
-            night_date = safe_date(item.get("night_date"), None)
+            # Try to get the night_date, but if invalid/missing, increment from check-in date
+            # Use fallback_to_today=False so invalid dates return None and trigger incrementing
+            night_date = safe_date(item.get("night_date"), None, fallback_to_today=False)
             if night_date is None:
                 # Increment from check-in date based on index
                 night_date = check_in_date + timedelta(days=idx)
