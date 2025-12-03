@@ -36,7 +36,11 @@ function generateFileName(baseName, employeeName, extension) {
  * Create a PDF containing all uploaded receipts
  */
 async function createReceiptsPDF(uploadedReceipts, employeeName) {
+  console.log('=== createReceiptsPDF called ===');
+  console.log('Number of receipts:', uploadedReceipts?.length || 0);
+
   if (!uploadedReceipts || uploadedReceipts.length === 0) {
+    console.log('No receipts to include in PDF');
     return null;
   }
 
@@ -74,6 +78,10 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
   // Add each receipt
   for (let i = 0; i < sortedReceipts.length; i++) {
     const receipt = sortedReceipts[i];
+    console.log(`Processing receipt ${i + 1}:`, receipt.fileName, 'fileType:', receipt.fileType);
+    console.log('  base64 exists:', !!receipt.base64);
+    console.log('  base64 starts with data:', receipt.base64?.substring(0, 30));
+
     doc.addPage();
     yPosition = margin;
 
@@ -102,28 +110,54 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
     doc.line(margin, yPosition, pageWidth - margin, yPosition);
     yPosition += 10;
 
-    // Try to embed image if it's an image type
-    if (receipt.base64 && (receipt.fileType.startsWith('image/') || receipt.base64.startsWith('data:image'))) {
+    // Check if it's an image
+    const isImage = receipt.fileType?.startsWith('image/') ||
+                    receipt.base64?.startsWith('data:image');
+
+    console.log('  isImage:', isImage);
+
+    if (receipt.base64 && isImage) {
       try {
         const imgWidth = pageWidth - 2 * margin;
         const maxHeight = pageHeight - yPosition - margin - 20;
 
+        // Detect format from data URL or file type
+        let imgFormat = 'JPEG';
+        if (receipt.base64.includes('data:image/png')) {
+          imgFormat = 'PNG';
+        } else if (receipt.base64.includes('data:image/gif')) {
+          imgFormat = 'GIF';
+        } else if (receipt.base64.includes('data:image/webp')) {
+          imgFormat = 'WEBP';
+        } else if (receipt.fileType === 'image/png') {
+          imgFormat = 'PNG';
+        } else if (receipt.fileType === 'image/gif') {
+          imgFormat = 'GIF';
+        }
+
+        console.log('  Using image format:', imgFormat);
+
         // Add the image (scaled to fit)
-        doc.addImage(receipt.base64, 'JPEG', margin, yPosition, imgWidth, Math.min(maxHeight, 180), undefined, 'MEDIUM');
+        doc.addImage(receipt.base64, imgFormat, margin, yPosition, imgWidth, Math.min(maxHeight, 180), undefined, 'MEDIUM');
+        console.log('  Image added successfully');
       } catch (err) {
+        console.error('Failed to embed receipt image:', err);
         doc.setFontSize(10);
         doc.setTextColor(239, 68, 68);
         doc.text('[Image could not be embedded]', margin, yPosition);
-        console.error('Failed to embed receipt image:', err);
+        yPosition += 10;
+        doc.setTextColor(107, 114, 128);
+        doc.text(`Error: ${err.message}`, margin, yPosition);
       }
     } else {
       // For PDFs or unsupported formats, show info box
+      console.log('  Not an image or no base64, showing info box');
       doc.setFillColor(248, 250, 252);
       doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 40, 3, 3, 'F');
       doc.setFontSize(10);
       doc.setTextColor(71, 85, 105);
       doc.text(`File Name: ${receipt.fileName}`, margin + 10, yPosition + 15);
-      doc.text(`File Type: ${receipt.fileType}`, margin + 10, yPosition + 28);
+      doc.text(`File Type: ${receipt.fileType || 'Unknown'}`, margin + 10, yPosition + 28);
     }
   }
 
@@ -141,6 +175,8 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
       { align: 'center' }
     );
   }
+
+  console.log('=== Receipts PDF created successfully ===');
 
   // Return as ArrayBuffer
   return doc.output('arraybuffer');
