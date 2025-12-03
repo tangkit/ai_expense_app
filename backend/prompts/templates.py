@@ -30,12 +30,22 @@ For HOTEL receipts, also extract:
 For MEAL receipts:
 - Note if the total exceeds $25 (requires companion information for compliance)
 
-IMPORTANT CURRENCY DETECTION:
+CRITICAL CURRENCY DETECTION (DO NOT DEFAULT TO USD):
 - Look for currency symbols: RM (MYR), S$ (SGD), ฿ (THB), $ (could be USD, SGD, AUD), € (EUR), £ (GBP)
-- Look for explicit currency codes: MYR, SGD, USD, EUR, etc.
-- Malaysian receipts often show "RM" or "MYR"
+- Look for explicit currency codes: MYR, SGD, USD, EUR, IDR, THB, etc.
+- Malaysian receipts show "RM", "MYR", or "Ringgit"
 - Singapore receipts show "S$" or "SGD"
+- Look for amounts like "RM 1,312.00" or "1,312.00 MYR"
 - Always return the ORIGINAL currency from the receipt, not converted amounts
+
+AIRLINE-BASED CURRENCY INFERENCE (if no explicit currency symbol found):
+- Batik Air, AirAsia, Malaysia Airlines, Firefly, Malindo Air → currency: "MYR"
+- Singapore Airlines, Scoot, SilkAir, Jetstar Asia → currency: "SGD"
+- Thai Airways, Bangkok Airways, Thai AirAsia → currency: "THB"
+- Garuda Indonesia, Lion Air, Citilink → currency: "IDR"
+- For flights departing from Malaysia (KUL, PEN, BKI, etc.) → likely MYR
+
+IMPORTANT: Batik Air is a Malaysian/Indonesian airline. If the ticket shows Batik Air, the currency is most likely MYR (Malaysian Ringgit) or IDR (Indonesian Rupiah). Look carefully for "RM" or amounts in the 1000+ range which indicates MYR
 
 Return your response as a valid JSON object with these fields. Use null for fields you cannot determine.
 Be precise with numbers - extract exact amounts shown on the receipt.

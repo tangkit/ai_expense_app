@@ -388,6 +388,38 @@ def validate_expense(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     return state
 
 
+def infer_currency_from_airline(airline: str, departure_city: str = None) -> str | None:
+    """Infer currency based on airline name or departure city."""
+    if not airline:
+        return None
+
+    airline_lower = airline.lower()
+
+    # Malaysian airlines
+    if any(x in airline_lower for x in ["batik air", "airasia", "malaysia airlines", "firefly", "malindo"]):
+        return "MYR"
+
+    # Singapore airlines
+    if any(x in airline_lower for x in ["singapore airlines", "scoot", "silkair", "jetstar asia"]):
+        return "SGD"
+
+    # Thai airlines
+    if any(x in airline_lower for x in ["thai airways", "bangkok airways", "thai airasia", "nok air"]):
+        return "THB"
+
+    # Indonesian airlines
+    if any(x in airline_lower for x in ["garuda", "lion air", "citilink", "batik air indonesia"]):
+        return "IDR"
+
+    # Check departure city for Malaysian airports
+    if departure_city:
+        departure_lower = departure_city.lower()
+        if any(x in departure_lower for x in ["kuala lumpur", "kul", "penang", "pen", "kota kinabalu", "bki", "johor", "langkawi", "malaysia"]):
+            return "MYR"
+
+    return None
+
+
 def convert_currency(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     """Convert foreign currency to reimbursement currency using exchange rates."""
     if state.get("error"):
@@ -397,6 +429,17 @@ def convert_currency(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     currency = extracted.get("currency", "USD").upper()
     total = Decimal(str(extracted.get("total", 0)))
     reimbursement_currency = settings.reimbursement_currency.upper()
+
+    # If currency is USD but we have airline info, try to infer the actual currency
+    if currency == "USD" and extracted.get("airline"):
+        inferred_currency = infer_currency_from_airline(
+            extracted.get("airline", ""),
+            extracted.get("departure_city", "")
+        )
+        if inferred_currency:
+            currency = inferred_currency
+            extracted["currency"] = currency
+            state["extracted_data"] = extracted
 
     # Store original currency info
     state["original_currency"] = currency
