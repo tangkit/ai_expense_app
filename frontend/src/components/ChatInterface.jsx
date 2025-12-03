@@ -492,17 +492,40 @@ async function parseTemplateFile(file) {
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
           console.log('Total rows found:', jsonData.length);
-          console.log('First 3 rows:', jsonData.slice(0, 3));
+          console.log('First 10 rows:', jsonData.slice(0, 10));
 
           if (jsonData.length > 0) {
-            // First row is typically headers
-            columns = jsonData[0].map(col => String(col || '').trim());
-            console.log('Raw first row (headers):', jsonData[0]);
+            // Find the header row - it's typically the row with the most columns
+            // Many templates have title rows at the top, so we scan first 15 rows
+            let headerRowIndex = 0;
+            let maxColumns = 0;
+
+            const rowsToScan = Math.min(jsonData.length, 15);
+            for (let i = 0; i < rowsToScan; i++) {
+              const row = jsonData[i] || [];
+              // Count non-empty cells in this row
+              const nonEmptyCells = row.filter(cell => cell !== null && cell !== undefined && String(cell).trim() !== '').length;
+
+              console.log(`Row ${i}: ${nonEmptyCells} non-empty cells:`, row);
+
+              // Look for row with most columns (likely the header)
+              // Require at least 3 columns to be considered a header row
+              if (nonEmptyCells > maxColumns && nonEmptyCells >= 3) {
+                maxColumns = nonEmptyCells;
+                headerRowIndex = i;
+              }
+            }
+
+            console.log(`Selected header row: ${headerRowIndex} with ${maxColumns} columns`);
+
+            // Extract columns from the identified header row
+            columns = jsonData[headerRowIndex].map(col => String(col || '').trim());
+            console.log('Header row content:', jsonData[headerRowIndex]);
             console.log('Processed columns:', columns);
 
-            // Store additional rows as sample data
-            if (jsonData.length > 1) {
-              sheetData = jsonData.slice(1, 6); // Get first 5 data rows as sample
+            // Store rows after header as sample data
+            if (jsonData.length > headerRowIndex + 1) {
+              sheetData = jsonData.slice(headerRowIndex + 1, headerRowIndex + 6);
             }
           }
         }
