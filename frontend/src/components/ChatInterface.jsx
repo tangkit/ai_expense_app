@@ -311,9 +311,11 @@ All receipts are shown below for your review. Edit each one and click "Save Expe
           const conv = parsedData.currencyConversion;
           const origSymbol = getCurrencySymbol(conv.originalCurrency);
           const convSymbol = getCurrencySymbol(conv.convertedCurrency);
+          // Log the exchange rate source to console for verification
+          console.log(`Exchange rate source: ${conv.exchangeRateSource} (1 ${conv.originalCurrency} = ${conv.exchangeRate.toFixed(4)} ${conv.convertedCurrency})`);
           extractionMessage += `
 • **Original Amount: ${origSymbol}${conv.originalAmount.toFixed(2)} ${conv.originalCurrency}**
-• Exchange Rate: 1 ${conv.originalCurrency} = ${conv.exchangeRate.toFixed(4)} ${conv.convertedCurrency} (${conv.exchangeRateSource})
+• Conversion Rate: ${conv.exchangeRate.toFixed(4)}
 • **Converted for Reimbursement: ${convSymbol}${conv.convertedAmount.toFixed(2)} ${conv.convertedCurrency}**`;
         } else {
           const currency = parsedData.extracted.currency || 'USD';

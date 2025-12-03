@@ -273,6 +273,7 @@ function getCurrencyFormat(currencyCode) {
 /**
  * Fetch exchange rates from backend API
  * Backend handles Alpha Vantage API calls securely
+ * Returns { rates: { ... }, source: 'api' | 'fallback' }
  */
 async function fetchExchangeRates(currencies) {
   // Filter out SGD and get unique currencies
@@ -283,7 +284,7 @@ async function fetchExchangeRates(currencies) {
   )];
 
   if (uniqueCurrencies.length === 0) {
-    return { SGD: 1 };
+    return { rates: { SGD: 1 }, source: 'none' };
   }
 
   try {
@@ -300,15 +301,24 @@ async function fetchExchangeRates(currencies) {
 
     if (response.ok) {
       const data = await response.json();
-      console.log('Exchange rates from backend:', data);
-      return { SGD: 1, ...data.rates };
+      const source = data.source || 'unknown';
+
+      // Clear indication of where rates came from
+      if (source === 'api') {
+        console.log('%c✓ Exchange rates fetched from Alpha Vantage API', 'color: green; font-weight: bold');
+      } else if (source === 'fallback') {
+        console.log('%c⚠ Using fallback exchange rates (Alpha Vantage unavailable or no API key)', 'color: orange; font-weight: bold');
+      }
+      console.log('Exchange rates:', data.rates);
+
+      return { rates: { SGD: 1, ...data.rates }, source };
     }
 
-    console.warn('Backend currency API failed, using fallback rates');
-    return getFallbackRates(uniqueCurrencies);
+    console.warn('%c✗ Backend currency API failed, using local fallback rates', 'color: red; font-weight: bold');
+    return { rates: getFallbackRates(uniqueCurrencies), source: 'local-fallback' };
   } catch (error) {
-    console.error('Error fetching exchange rates:', error);
-    return getFallbackRates(uniqueCurrencies);
+    console.error('%c✗ Error fetching exchange rates:', 'color: red; font-weight: bold', error);
+    return { rates: getFallbackRates(uniqueCurrencies), source: 'local-fallback' };
   }
 }
 
@@ -602,8 +612,8 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
   const currencyList = expandedExpenses.map(e => e.currency).filter(Boolean);
   console.log('Currencies found:', currencyList);
 
-  const exchangeRates = await fetchExchangeRates(currencyList);
-  console.log('Exchange rates:', exchangeRates);
+  const { rates: exchangeRates, source: rateSource } = await fetchExchangeRates(currencyList);
+  console.log('Exchange rates source:', rateSource);
 
   for (let expenseIndex = 0; expenseIndex < rowsToInsert; expenseIndex++) {
     const expense = expandedExpenses[expenseIndex];
@@ -643,7 +653,7 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
       // Apply alignment and indent
       const existingAlignment = cell.alignment || {};
 
-      // Description column - left align
+      // Description column - left align with indent
       if (normalizedColName.includes('description') || normalizedColName.includes('details')) {
         cell.alignment = {
           ...existingAlignment,
@@ -651,7 +661,15 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate) {
           indent: 1
         };
       }
-      // Date, Expense Type, Amount columns - add indent
+      // Amount (Reimbursed) column - left align with indent
+      else if (normalizedColName.includes('amount') && normalizedColName.includes('reimburs')) {
+        cell.alignment = {
+          ...existingAlignment,
+          horizontal: 'left',
+          indent: 1
+        };
+      }
+      // Date, Expense Type, Amount (Local) columns - add indent
       else if (normalizedColName.includes('date') ||
                normalizedColName.includes('expense type') ||
                normalizedColName.includes('type') ||
