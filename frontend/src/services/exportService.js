@@ -222,8 +222,38 @@ function getFieldValue(expense, fieldName) {
 }
 
 /**
+ * Find the footer section in the template (signature/approval area)
+ * Returns the 0-indexed row where footer starts, or -1 if not found
+ */
+function findFooterSection(worksheet, headerRowIndex, totalRows) {
+  const footerKeywords = ['employee name', 'signature', 'approved by', 'approver', 'authorization', 'verified by'];
+
+  // Start searching from a few rows after header
+  const searchStart = headerRowIndex + 2;
+
+  for (let row = searchStart; row < totalRows; row++) {
+    // Check cells in this row for footer keywords
+    for (let col = 0; col < 10; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+      const cell = worksheet[cellAddress];
+      if (cell && cell.v) {
+        const cellValue = String(cell.v).toLowerCase().trim();
+        for (const keyword of footerKeywords) {
+          if (cellValue.includes(keyword)) {
+            console.log(`Found footer keyword "${keyword}" at row ${row} (cell ${cellAddress})`);
+            return row;
+          }
+        }
+      }
+    }
+  }
+
+  return -1; // No footer found
+}
+
+/**
  * Populate the original company template with expense data
- * Preserves original formatting and structure
+ * Preserves original formatting, structure, and footer section
  */
 function populateOriginalTemplate(expenses, companyTemplate) {
   console.log('=== Populating Original Template ===');
@@ -238,8 +268,13 @@ function populateOriginalTemplate(expenses, companyTemplate) {
     bytes[i] = binaryString.charCodeAt(i);
   }
 
-  // Load the original template workbook
-  const workbook = XLSX.read(bytes.buffer, { type: 'array', cellStyles: true });
+  // Load the original template workbook with all options to preserve styling
+  const workbook = XLSX.read(bytes.buffer, {
+    type: 'array',
+    cellStyles: true,
+    cellNF: true,
+    cellFormula: true
+  });
 
   // Get the first sheet
   const firstSheetName = workbook.SheetNames[0];
@@ -247,66 +282,103 @@ function populateOriginalTemplate(expenses, companyTemplate) {
 
   console.log('First sheet name:', firstSheetName);
 
-  // Determine the header row (0-indexed for xlsx)
-  const headerRowIndex = companyTemplate.headerRowIndex || 0;
-  const dataStartRow = headerRowIndex + 2; // 1-indexed for xlsx (header is at headerRowIndex+1)
-
   // Get the range of the worksheet
   const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
+  const totalRows = range.e.r + 1;
 
-  // Build column mapping: column letter -> expense field
-  const columnMapping = {};
-  companyTemplate.columns.forEach((colName, index) => {
-    const colLetter = XLSX.utils.encode_col(index);
-    columnMapping[colLetter] = colName;
+  // Determine the header row (0-indexed)
+  const headerRowIndex = companyTemplate.headerRowIndex || 0;
+  const dataStartRow = headerRowIndex + 1; // 0-indexed row for first data entry
+
+  // Find footer section to preserve it
+  const footerRowIndex = findFooterSection(worksheet, headerRowIndex, totalRows);
+  console.log('Footer section starts at row:', footerRowIndex >= 0 ? footerRowIndex : 'Not found');
+
+  // Calculate available data rows
+  let maxDataRows;
+  if (footerRowIndex >= 0) {
+    // Leave at least one empty row before footer
+    maxDataRows = footerRowIndex - dataStartRow - 1;
+  } else {
+    // No footer found, use reasonable default (20 rows for data)
+    maxDataRows = 20;
+  }
+
+  console.log('Available data rows:', maxDataRows);
+  console.log('Expenses to insert:', expenses.length);
+
+  // Get a template cell's style from the first data row (if exists) for each column
+  const templateStyles = {};
+  companyTemplate.columns.forEach((colName, colIndex) => {
+    const templateCellAddress = XLSX.utils.encode_cell({ r: dataStartRow, c: colIndex });
+    const templateCell = worksheet[templateCellAddress];
+    if (templateCell && templateCell.s) {
+      templateStyles[colIndex] = templateCell.s;
+    }
   });
 
-  console.log('Column mapping:', columnMapping);
-
-  // Clear any existing data rows (below header) while preserving header and above
-  const keysToDelete = [];
-  for (const key of Object.keys(worksheet)) {
-    if (key.startsWith('!')) continue; // Skip metadata keys
-    const cellRef = XLSX.utils.decode_cell(key);
-    if (cellRef.r > headerRowIndex) {
-      keysToDelete.push(key);
+  // Clear only the data area cells (between header and footer), preserving structure
+  const dataEndRow = footerRowIndex >= 0 ? footerRowIndex - 1 : dataStartRow + maxDataRows;
+  for (let row = dataStartRow; row <= dataEndRow; row++) {
+    for (let col = 0; col < companyTemplate.columns.length; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+      // Only clear the value, try to preserve the cell object if it has styling
+      if (worksheet[cellAddress]) {
+        worksheet[cellAddress].v = '';
+        if (worksheet[cellAddress].w) delete worksheet[cellAddress].w; // Clear formatted value
+      }
     }
   }
-  keysToDelete.forEach(key => delete worksheet[key]);
 
   // Insert expense data rows
-  expenses.forEach((expense, expenseIndex) => {
-    const rowNum = dataStartRow + expenseIndex; // 1-indexed row number for xlsx
+  const rowsToInsert = Math.min(expenses.length, maxDataRows);
+  if (expenses.length > maxDataRows) {
+    console.warn(`Warning: Only ${maxDataRows} rows available, but ${expenses.length} expenses to insert`);
+  }
+
+  for (let expenseIndex = 0; expenseIndex < rowsToInsert; expenseIndex++) {
+    const expense = expenses[expenseIndex];
+    const rowIndex = dataStartRow + expenseIndex; // 0-indexed row
 
     companyTemplate.columns.forEach((colName, colIndex) => {
-      const colLetter = XLSX.utils.encode_col(colIndex);
-      const cellAddress = `${colLetter}${rowNum}`;
+      const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
 
       // Get the value for this column
       const value = getExpenseValueForColumn(expense, colName);
 
-      // Set cell value
+      // Create or update cell, preserving any existing style
+      const existingCell = worksheet[cellAddress] || {};
+      const existingStyle = existingCell.s || templateStyles[colIndex];
+
       if (value !== '' && value !== null && value !== undefined) {
         // Determine cell type
         if (typeof value === 'number') {
-          worksheet[cellAddress] = { t: 'n', v: value };
+          worksheet[cellAddress] = {
+            t: 'n',
+            v: value,
+            ...(existingStyle && { s: existingStyle })
+          };
         } else {
-          worksheet[cellAddress] = { t: 's', v: String(value) };
+          worksheet[cellAddress] = {
+            t: 's',
+            v: String(value),
+            ...(existingStyle && { s: existingStyle })
+          };
         }
+      } else {
+        // Empty cell but preserve style
+        worksheet[cellAddress] = {
+          t: 's',
+          v: '',
+          ...(existingStyle && { s: existingStyle })
+        };
       }
     });
-  });
+  }
 
-  // Update the worksheet range to include new data
-  const newEndRow = dataStartRow + expenses.length - 1;
-  const newEndCol = companyTemplate.columns.length - 1;
-  worksheet['!ref'] = XLSX.utils.encode_range({
-    s: { r: 0, c: 0 },
-    e: { r: Math.max(newEndRow - 1, range.e.r), c: Math.max(newEndCol, range.e.c) }
-  });
-
-  console.log('Updated worksheet range:', worksheet['!ref']);
-  console.log('Populated', expenses.length, 'expense rows starting at row', dataStartRow);
+  // Keep the original worksheet range to preserve footer section
+  console.log('Keeping original worksheet range:', worksheet['!ref']);
+  console.log('Populated', rowsToInsert, 'expense rows starting at row', dataStartRow + 1, '(1-indexed)');
 
   return workbook;
 }
