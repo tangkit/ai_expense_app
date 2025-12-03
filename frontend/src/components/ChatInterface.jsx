@@ -639,6 +639,8 @@ async function parseTemplateFile(file) {
         console.log('File name:', file.name);
         console.log('File type:', file.type);
 
+        let headerRowIndex = 0; // Default for CSV
+
         if (file.name.toLowerCase().endsWith('.csv')) {
           // Parse CSV
           const text = new TextDecoder().decode(data);
@@ -647,6 +649,7 @@ async function parseTemplateFile(file) {
             columns = lines[0].split(',').map(col => col.trim().replace(/"/g, ''));
           }
           console.log('CSV columns:', columns);
+          headerRowIndex = 0; // CSV header is always first row
         } else {
           // Parse Excel file using xlsx library
           console.log('Reading Excel file with xlsx library...');
@@ -669,7 +672,6 @@ async function parseTemplateFile(file) {
           if (jsonData.length > 0) {
             // Find the header row - it's typically the row with the most columns
             // Many templates have title rows at the top, so we scan first 15 rows
-            let headerRowIndex = 0;
             let maxColumns = 0;
 
             const rowsToScan = Math.min(jsonData.length, 15);
@@ -711,12 +713,28 @@ async function parseTemplateFile(file) {
           return;
         }
 
+        // Convert ArrayBuffer to base64 for storage (to populate original template during export)
+        const uint8Array = new Uint8Array(data);
+        let binary = '';
+        for (let i = 0; i < uint8Array.length; i++) {
+          binary += String.fromCharCode(uint8Array[i]);
+        }
+        const base64Content = btoa(binary);
+
+        console.log('=== Template Storage ===');
+        console.log('File content length (bytes):', uint8Array.length);
+        console.log('Base64 content length:', base64Content.length);
+        console.log('Header row index:', headerRowIndex);
+
         resolve({
           name: file.name,
           columns: columns,
           sampleData: sheetData,
           uploadedAt: new Date().toISOString(),
-          fileType: file.type || 'application/vnd.ms-excel'
+          fileType: file.type || 'application/vnd.ms-excel',
+          // Store original file content for direct population during export
+          fileContent: base64Content,
+          headerRowIndex: headerRowIndex
         });
       } catch (err) {
         console.error('Error parsing template:', err);
