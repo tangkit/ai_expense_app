@@ -240,19 +240,19 @@ Please make sure it's a valid Excel (.xls, .xlsx) or CSV file.`);
 
         const parsedExpenses = await parseReceipt(file);
 
-        // Get currency symbol helper
+        // Get currency symbol helper (with non-breaking space)
         const getCurrencySymbol = (currencyCode) => {
           const symbols = {
-            'MYR': 'RM ',
-            'SGD': 'SGD ',
-            'EUR': '€',
-            'GBP': '£',
-            'THB': '฿',
-            'IDR': 'Rp ',
-            'JPY': '¥',
-            'USD': 'USD '
+            'MYR': 'RM\u00A0',
+            'SGD': 'SGD\u00A0',
+            'EUR': '€\u00A0',
+            'GBP': '£\u00A0',
+            'THB': '฿\u00A0',
+            'IDR': 'Rp\u00A0',
+            'JPY': '¥\u00A0',
+            'USD': 'USD\u00A0'
           };
-          return symbols[currencyCode] || currencyCode + ' ';
+          return symbols[currencyCode] || currencyCode + '\u00A0';
         };
 
         // Handle multiple receipts detected in single document
@@ -389,18 +389,18 @@ Please review and edit the details below, then click "Save Expense" to add it to
   const handleExpenseSave = (expense) => {
     addExpense(expense);
     clearCurrentExpense();
-    // Get currency symbol for display
+    // Get currency symbol for display (with non-breaking space)
     const symbols = {
-      'MYR': 'RM ',
-      'SGD': 'SGD ',
-      'EUR': '€',
-      'GBP': '£',
-      'THB': '฿',
-      'IDR': 'Rp ',
-      'JPY': '¥',
-      'USD': 'USD '
+      'MYR': 'RM\u00A0',
+      'SGD': 'SGD\u00A0',
+      'EUR': '€\u00A0',
+      'GBP': '£\u00A0',
+      'THB': '฿\u00A0',
+      'IDR': 'Rp\u00A0',
+      'JPY': '¥\u00A0',
+      'USD': 'USD\u00A0'
     };
-    const currSymbol = symbols[expense.currency] || expense.currency + ' ';
+    const currSymbol = symbols[expense.currency] || expense.currency + '\u00A0';
 
     addBotMessage(`✅ Expense saved successfully!
 
@@ -417,16 +417,16 @@ The expense has been added to your report. Upload another receipt or type "expor
     removePendingExpense(expense.id);
 
     const symbols = {
-      'MYR': 'RM ',
-      'SGD': 'SGD ',
-      'EUR': '€',
-      'GBP': '£',
-      'THB': '฿',
-      'IDR': 'Rp ',
-      'JPY': '¥',
-      'USD': 'USD '
+      'MYR': 'RM\u00A0',
+      'SGD': 'SGD\u00A0',
+      'EUR': '€\u00A0',
+      'GBP': '£\u00A0',
+      'THB': '฿\u00A0',
+      'IDR': 'Rp\u00A0',
+      'JPY': '¥\u00A0',
+      'USD': 'USD\u00A0'
     };
-    const currSymbol = symbols[expense.currency] || expense.currency + ' ';
+    const currSymbol = symbols[expense.currency] || expense.currency + '\u00A0';
     const remainingCount = pendingExpenses.length - 1;
 
     if (remainingCount > 0) {

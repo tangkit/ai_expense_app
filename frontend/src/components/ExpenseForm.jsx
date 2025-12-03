@@ -8,19 +8,19 @@ import {
   MEAL_COMPANION_THRESHOLD
 } from '../constants/expenseTypes';
 
-// Currency symbol helper (with spacing for readability)
+// Currency symbol helper (with non-breaking space for readability)
 const getCurrencySymbol = (currencyCode) => {
   const symbols = {
-    'MYR': 'RM ',
-    'SGD': 'SGD ',
-    'EUR': '€',
-    'GBP': '£',
-    'THB': '฿',
-    'IDR': 'Rp ',
-    'JPY': '¥',
-    'USD': 'USD '
+    'MYR': 'RM\u00A0',
+    'SGD': 'SGD\u00A0',
+    'EUR': '€\u00A0',
+    'GBP': '£\u00A0',
+    'THB': '฿\u00A0',
+    'IDR': 'Rp\u00A0',
+    'JPY': '¥\u00A0',
+    'USD': 'USD\u00A0'
   };
-  return symbols[currencyCode] || currencyCode + ' ';
+  return symbols[currencyCode] || currencyCode + '\u00A0';
 };
 
 export default function ExpenseForm({ expense, onSave, onCancel }) {
