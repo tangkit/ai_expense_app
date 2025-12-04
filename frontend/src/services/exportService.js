@@ -3,12 +3,91 @@ import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
 import { format } from 'date-fns';
+import * as pdfjsLib from 'pdfjs-dist';
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABELS,
   SPREADSHEET_COLUMNS,
   HOTEL_ITEMIZED_COLUMNS
 } from '../constants/expenseTypes';
+
+// Configure pdf.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
+/**
+ * Convert a PDF file (as base64 data URL) to an array of image data URLs
+ * Each page becomes one image
+ */
+async function convertPdfToImages(base64DataUrl, maxPages = 5) {
+  console.log('=== Converting PDF to images ===');
+
+  // Extract raw base64 data (remove data URL prefix)
+  const base64Data = base64DataUrl.split(',')[1];
+  if (!base64Data) {
+    console.error('Invalid base64 data URL');
+    return [];
+  }
+
+  // Convert base64 to Uint8Array
+  const binaryString = atob(base64Data);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+
+  try {
+    // Load the PDF document
+    const loadingTask = pdfjsLib.getDocument({ data: bytes });
+    const pdf = await loadingTask.promise;
+
+    console.log(`PDF loaded: ${pdf.numPages} pages`);
+
+    const images = [];
+    const pagesToRender = Math.min(pdf.numPages, maxPages);
+
+    for (let pageNum = 1; pageNum <= pagesToRender; pageNum++) {
+      console.log(`Rendering page ${pageNum}/${pagesToRender}`);
+
+      const page = await pdf.getPage(pageNum);
+
+      // Set scale for good quality (1.5 = 150% of original size)
+      const scale = 1.5;
+      const viewport = page.getViewport({ scale });
+
+      // Create a canvas to render the page
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      // Render the page to canvas
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
+
+      // Convert canvas to JPEG data URL
+      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      images.push({
+        dataUrl: imageDataUrl,
+        width: viewport.width,
+        height: viewport.height,
+        pageNum: pageNum
+      });
+
+      console.log(`Page ${pageNum} rendered: ${viewport.width}x${viewport.height}`);
+    }
+
+    if (pdf.numPages > maxPages) {
+      console.log(`Note: Only rendered first ${maxPages} pages of ${pdf.numPages} total`);
+    }
+
+    return images;
+  } catch (error) {
+    console.error('Error converting PDF to images:', error);
+    return [];
+  }
+}
 
 /**
  * Sanitize a string for use in filenames
@@ -179,16 +258,72 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
         doc.text(`Error: ${err.message}`, margin + 10, yPosition + 30);
         doc.text(`Format attempted: ${imgFormat || 'Unknown'}`, margin + 10, yPosition + 42);
       }
+    } else if (receipt.fileType === 'application/pdf' || base64Start.includes('data:application/pdf')) {
+      // For PDF files, convert pages to images and embed them
+      console.log('  PDF file detected, converting to images...');
+      try {
+        const pdfImages = await convertPdfToImages(receipt.base64, 5); // Max 5 pages per PDF
+
+        if (pdfImages.length === 0) {
+          throw new Error('Failed to convert PDF pages');
+        }
+
+        console.log(`  Converted ${pdfImages.length} PDF pages to images`);
+
+        // Add each page as an image
+        for (let pageIdx = 0; pageIdx < pdfImages.length; pageIdx++) {
+          const pageImage = pdfImages[pageIdx];
+
+          if (pageIdx > 0) {
+            // Add new page for subsequent PDF pages
+            doc.addPage();
+            yPosition = margin;
+
+            // Page header for continuation
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(107, 114, 128);
+            doc.text(`${receipt.fileName} - Page ${pageImage.pageNum}`, margin, yPosition);
+            yPosition += 10;
+          }
+
+          const imgWidth = pageWidth - 2 * margin;
+          const maxHeight = pageHeight - yPosition - margin - 10;
+
+          // Calculate aspect ratio to fit within bounds
+          const aspectRatio = pageImage.width / pageImage.height;
+          let displayWidth = imgWidth;
+          let displayHeight = imgWidth / aspectRatio;
+
+          if (displayHeight > maxHeight) {
+            displayHeight = maxHeight;
+            displayWidth = maxHeight * aspectRatio;
+          }
+
+          doc.addImage(pageImage.dataUrl, 'JPEG', margin, yPosition, displayWidth, displayHeight, undefined, 'MEDIUM');
+          console.log(`  Added PDF page ${pageImage.pageNum} to output`);
+        }
+      } catch (pdfErr) {
+        console.error('  Failed to convert PDF:', pdfErr);
+        doc.setFillColor(254, 242, 242);
+        doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 50, 3, 3, 'F');
+        doc.setFontSize(10);
+        doc.setTextColor(185, 28, 28);
+        doc.text('[PDF could not be converted to images]', margin + 10, yPosition + 15);
+        doc.setTextColor(107, 114, 128);
+        doc.text(`File: ${receipt.fileName}`, margin + 10, yPosition + 28);
+        doc.text(`Error: ${pdfErr.message}`, margin + 10, yPosition + 41);
+      }
     } else {
-      // For PDFs or unsupported formats, show info box
-      console.log('  Not an image format, showing info box');
+      // For unsupported formats, show info box
+      console.log('  Unsupported format, showing info box');
       doc.setFillColor(248, 250, 252);
       doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 50, 3, 3, 'F');
       doc.setFontSize(10);
       doc.setTextColor(71, 85, 105);
       doc.text(`File Name: ${receipt.fileName}`, margin + 10, yPosition + 15);
       doc.text(`File Type: ${receipt.fileType || 'Unknown'}`, margin + 10, yPosition + 28);
-      doc.text('(Non-image files are listed but not embedded)', margin + 10, yPosition + 41);
+      doc.text('(This file format is not supported for embedding)', margin + 10, yPosition + 41);
     }
   }
 
@@ -1151,11 +1286,13 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
           indent: 1
         };
       }
-      // Amount (Reimbursed) column - right align for numbers
+      // Amount (Reimbursed) column - right align, vertically centered, with indent
       else if (normalizedColName.includes('amount') && normalizedColName.includes('reimburs')) {
         cell.alignment = {
           ...existingAlignment,
-          horizontal: 'right'
+          horizontal: 'right',
+          vertical: 'middle',
+          indent: 1
         };
       }
       // Date, Expense Type, Amount (Local) columns - add indent
@@ -1214,8 +1351,12 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
       // Set as numeric value with SGD currency format (so Excel can verify the sum)
       totalReimbursedCell.value = sumReimbursed;
       totalReimbursedCell.numFmt = '"SGD "#,##0.00';
-      // Right align for numbers
-      totalReimbursedCell.alignment = { horizontal: 'right' };
+      // Right align, vertically centered, with indent
+      totalReimbursedCell.alignment = {
+        horizontal: 'right',
+        vertical: 'middle',
+        indent: 1
+      };
       console.log(`Set TOTAL Amount (Reimbursed) cell to: ${sumReimbursed} (with SGD format)`);
     }
   }
