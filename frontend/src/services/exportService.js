@@ -208,11 +208,16 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
 
       if (!receipt.base64) {
         console.log('  ERROR: No base64 data for this receipt!');
-        // Add error page
+        // Add error page (simple text, no header overlay)
         const errorPage = pdfDoc.addPage([595, 842]);
-        drawReceiptHeader(errorPage, receiptNum, totalReceipts, receipt.fileName, uploadDate);
+        errorPage.drawText(`Receipt ${receiptNum} of ${totalReceipts} - Error`, {
+          x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.73, 0.11, 0.11)
+        });
+        errorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
+          x: 50, y: 778, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+        });
         errorPage.drawText('Receipt data not available - file was not properly stored.', {
-          x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
+          x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
         });
         continue;
       }
@@ -257,47 +262,42 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
             thickness: 0.5,
             color: rgb(0.78, 0.78, 0.78)
           });
-          separatorPage.drawText('The following pages contain the original PDF receipt with headers:', {
+          separatorPage.drawText('The following pages contain the original PDF receipt:', {
             x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
           });
 
-          // Copy each page from source PDF and add header
+          // Copy each page from source PDF (without headers - keep receipts clean)
           const copiedPages = await pdfDoc.copyPages(sourcePdf, sourcePdf.getPageIndices());
           for (let pageIdx = 0; pageIdx < copiedPages.length; pageIdx++) {
             const copiedPage = copiedPages[pageIdx];
-            // Add the page to the document first
+            // Add the page to the document without any overlays
             pdfDoc.addPage(copiedPage);
-            // Draw header on the copied page
-            drawReceiptHeader(
-              copiedPage,
-              receiptNum,
-              totalReceipts,
-              receipt.fileName,
-              uploadDate,
-              pageIdx + 1,
-              pageCount
-            );
           }
 
-          console.log(`  SUCCESS: Merged ${pageCount} pages from PDF with headers`);
+          console.log(`  SUCCESS: Merged ${pageCount} pages from PDF (no headers)`);
         } catch (pdfError) {
           console.error('  FAILED to merge PDF:', pdfError);
-          // Add error page
+          // Add error page (simple text, no header overlay)
           const errorPage = pdfDoc.addPage([595, 842]);
-          drawReceiptHeader(errorPage, receiptNum, totalReceipts, receipt.fileName, uploadDate);
+          errorPage.drawText(`Receipt ${receiptNum} of ${totalReceipts} - Error`, {
+            x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.73, 0.11, 0.11)
+          });
+          errorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
+            x: 50, y: 778, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+          });
           errorPage.drawText('[PDF could not be embedded]', {
-            x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
+            x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
           });
           errorPage.drawText(sanitizeForPdf(`Error: ${pdfError.message}`), {
-            x: 50, y: 680, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+            x: 50, y: 720, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
           });
           errorPage.drawText('Original file is available in the receipts/ folder', {
-            x: 50, y: 660, size: 9, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
+            x: 50, y: 700, size: 9, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
           });
         }
       } else if (isImage) {
-        // For image files, create page with header and embed image below
-        console.log('  Embedding image with header...');
+        // For image files, embed image on a clean page (no header overlay)
+        console.log('  Embedding image...');
         try {
           let image;
           const isPng = receipt.fileType === 'image/png' || base64Start.includes('data:image/png');
@@ -316,10 +316,10 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
             }
           }
 
-          // Calculate dimensions to fit below header
+          // Calculate dimensions to fit on page (no header overlay)
           const imgDims = image.scale(1);
           const maxWidth = 555; // 595 - 2*20 margin
-          const maxHeight = 720; // 842 - 60 header - 50 bottom - 12 margin
+          const maxHeight = 782; // 842 - 30 top margin - 30 bottom margin
           let scale = 1;
 
           if (imgDims.width > maxWidth || imgDims.height > maxHeight) {
@@ -351,19 +351,16 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
             thickness: 0.5,
             color: rgb(0.78, 0.78, 0.78)
           });
-          separatorPage.drawText('The following page contains the receipt image with header:', {
+          separatorPage.drawText('The following page contains the receipt image:', {
             x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
           });
 
-          // Add page with image
+          // Add page with image (no header overlay - keep receipt clean)
           const imagePage = pdfDoc.addPage([595, 842]);
 
-          // Draw header
-          drawReceiptHeader(imagePage, receiptNum, totalReceipts, receipt.fileName, uploadDate, 1, 1);
-
-          // Center the image below header
+          // Center the image on the page using full available space
           const imgX = (595 - scaledWidth) / 2;
-          const imgY = 842 - 70 - scaledHeight; // Below header
+          const imgY = (842 - scaledHeight) / 2; // Vertically centered
 
           imagePage.drawImage(image, {
             x: imgX,
@@ -372,29 +369,39 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
             height: scaledHeight
           });
 
-          console.log(`  SUCCESS: Image embedded with header (${scaledWidth.toFixed(0)}x${scaledHeight.toFixed(0)})`);
+          console.log(`  SUCCESS: Image embedded (${scaledWidth.toFixed(0)}x${scaledHeight.toFixed(0)})`);
         } catch (imgError) {
           console.error('  FAILED to embed image:', imgError);
-          // Add error page
+          // Add error page (simple text, no header overlay)
           const errorPage = pdfDoc.addPage([595, 842]);
-          drawReceiptHeader(errorPage, receiptNum, totalReceipts, receipt.fileName, uploadDate);
+          errorPage.drawText(`Receipt ${receiptNum} of ${totalReceipts} - Error`, {
+            x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.73, 0.11, 0.11)
+          });
+          errorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
+            x: 50, y: 778, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+          });
           errorPage.drawText('[Image could not be embedded]', {
-            x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
+            x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
           });
           errorPage.drawText(sanitizeForPdf(`Error: ${imgError.message}`), {
-            x: 50, y: 680, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+            x: 50, y: 720, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
           });
         }
       } else {
-        // Unsupported format
+        // Unsupported format (simple text, no header overlay)
         console.log('  Unsupported format');
         const infoPage = pdfDoc.addPage([595, 842]);
-        drawReceiptHeader(infoPage, receiptNum, totalReceipts, receipt.fileName, uploadDate);
+        infoPage.drawText(`Receipt ${receiptNum} of ${totalReceipts} - Unsupported Format`, {
+          x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.42, 0.45, 0.5)
+        });
+        infoPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
+          x: 50, y: 778, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+        });
         infoPage.drawText('This file format is not supported for embedding.', {
-          x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+          x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
         });
         infoPage.drawText('Original file is available in the receipts/ folder', {
-          x: 50, y: 680, size: 10, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
+          x: 50, y: 720, size: 10, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
         });
       }
     }
@@ -869,7 +876,21 @@ function expandExpensesForExport(expenses) {
   const expandedRows = [];
 
   expenses.forEach(expense => {
-    if (expense.category === EXPENSE_CATEGORIES.HOTEL &&
+    // Case-insensitive category comparison for hotel detection
+    const expenseCategory = (expense.category || '').toLowerCase();
+    const isHotel = expenseCategory === EXPENSE_CATEGORIES.HOTEL || expenseCategory === 'hotel';
+
+    // Debug logging for hotel detection
+    if (isHotel) {
+      console.log(`[Hotel Detected] ${expense.vendor}:`, {
+        category: expense.category,
+        expenseCategory,
+        hasItemization: !!expense.hotelItemization,
+        itemizationLength: expense.hotelItemization?.length || 0
+      });
+    }
+
+    if (isHotel &&
         expense.hotelItemization &&
         expense.hotelItemization.length > 0) {
       const totalNights = expense.hotelItemization.length;
