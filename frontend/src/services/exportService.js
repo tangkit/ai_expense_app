@@ -1367,27 +1367,34 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
 
         // Debug: Log original cell format BEFORE we change it
         const originalFormat = cell.numFmt;
+        const originalStyle = cell.style;
 
-        cell.value = roundedAmount;
         // Apply currency number format based on local currency
         const currencyFormat = currencyConfig?.format ||
           (decimals === 0 ? `"${localCurrency} "#,##0` : `"${localCurrency} "#,##0.${'0'.repeat(decimals)}`);
 
-        // ExcelJS sometimes requires setting via style object to properly override template format
+        // IMPORTANT: To properly override template cell formats in ExcelJS, we need to:
+        // 1. Set the value first
+        // 2. Create a completely new style object (not merge with existing)
+        // 3. Preserve only alignment and borders from original style
+        cell.value = roundedAmount;
+
+        // Create fresh style with only the properties we want to preserve
         cell.style = {
-          ...cell.style,
+          alignment: originalStyle?.alignment || { horizontal: 'right', vertical: 'middle', indent: 1 },
+          border: originalStyle?.border,
+          fill: originalStyle?.fill,
+          font: originalStyle?.font,
+          // Force new numFmt - this is the key fix
           numFmt: currencyFormat
         };
-        // Also set directly as backup
-        cell.numFmt = currencyFormat;
 
         // Debug: Log the currency format being applied
         console.log(`[Amount Local] Row ${rowIndex}: ${expense.vendor || expense.description}`, {
           localCurrency,
           localAmount,
           roundedAmount,
-          originalFormat,
-          currencyConfig,
+          originalFormat: originalFormat,
           newFormat: currencyFormat,
           'cell.numFmt after set': cell.numFmt,
           'cell.style.numFmt': cell.style?.numFmt
