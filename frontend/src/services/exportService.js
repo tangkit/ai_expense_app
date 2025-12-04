@@ -69,7 +69,7 @@ function sanitizeForPdf(str) {
 
 /**
  * Create a PDF containing all uploaded receipts using pdf-lib
- * This allows proper merging of PDF receipts and embedding of images
+ * Each receipt page has a header with receipt info drawn on top
  */
 async function createReceiptsPDF(uploadedReceipts, employeeName) {
   console.log('=== createReceiptsPDF called (pdf-lib) ===');
@@ -88,8 +88,7 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
       fileType: r.fileType,
       uploadedAt: r.uploadedAt,
       hasBase64: !!r.base64,
-      base64Length: r.base64?.length || 0,
-      base64Preview: r.base64?.substring(0, 50)
+      base64Length: r.base64?.length || 0
     });
   });
 
@@ -99,7 +98,54 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
     const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    // Add title page
+    // Helper function to draw header on a page
+    const drawReceiptHeader = (page, receiptNum, totalReceipts, fileName, uploadDate, receiptPageNum = null, receiptTotalPages = null) => {
+      const { height } = page.getSize();
+      const headerY = height - 25; // Position near top of page
+
+      // Draw semi-transparent white background for header
+      page.drawRectangle({
+        x: 0,
+        y: height - 55,
+        width: 595,
+        height: 55,
+        color: rgb(1, 1, 1),
+        opacity: 0.9
+      });
+
+      // Receipt X of Y
+      page.drawText(sanitizeForPdf(`Receipt ${receiptNum} of ${totalReceipts}`), {
+        x: 20, y: headerY, size: 11, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
+      });
+
+      // File name (truncate if too long)
+      const truncatedFileName = fileName.length > 50 ? fileName.substring(0, 47) + '...' : fileName;
+      page.drawText(sanitizeForPdf(`File: ${truncatedFileName}`), {
+        x: 20, y: headerY - 14, size: 9, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+      });
+
+      // Uploaded date
+      page.drawText(sanitizeForPdf(`Uploaded: ${uploadDate}`), {
+        x: 20, y: headerY - 26, size: 8, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+      });
+
+      // Receipt page X of Y (for multi-page receipts)
+      if (receiptPageNum !== null && receiptTotalPages !== null) {
+        page.drawText(`Receipt page ${receiptPageNum} of ${receiptTotalPages}`, {
+          x: 400, y: headerY, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+        });
+      }
+
+      // Draw line under header
+      page.drawLine({
+        start: { x: 20, y: height - 58 },
+        end: { x: 575, y: height - 58 },
+        thickness: 0.5,
+        color: rgb(0.78, 0.78, 0.78)
+      });
+    };
+
+    // Add cover/title page
     const titlePage = pdfDoc.addPage([595, 842]); // A4 size
     const { width, height } = titlePage.getSize();
 
@@ -146,27 +192,27 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
     const sortedReceipts = [...uploadedReceipts].sort(
       (a, b) => new Date(a.uploadedAt) - new Date(b.uploadedAt)
     );
+    const totalReceipts = sortedReceipts.length;
 
     // Process each receipt
     for (let i = 0; i < sortedReceipts.length; i++) {
       const receipt = sortedReceipts[i];
-      console.log(`\n=== Processing receipt ${i + 1}/${sortedReceipts.length} ===`);
+      const receiptNum = i + 1;
+      const uploadDate = receipt.uploadedAt
+        ? format(new Date(receipt.uploadedAt), 'MMM d, yyyy h:mm a')
+        : 'Unknown';
+
+      console.log(`\n=== Processing receipt ${receiptNum}/${totalReceipts} ===`);
       console.log('  fileName:', receipt.fileName);
       console.log('  fileType:', receipt.fileType);
-      console.log('  base64 exists:', !!receipt.base64);
 
       if (!receipt.base64) {
         console.log('  ERROR: No base64 data for this receipt!');
         // Add error page
         const errorPage = pdfDoc.addPage([595, 842]);
-        errorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
-          x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
-        });
-        errorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
-          x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
-        });
+        drawReceiptHeader(errorPage, receiptNum, totalReceipts, receipt.fileName, uploadDate);
         errorPage.drawText('Receipt data not available - file was not properly stored.', {
-          x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
+          x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
         });
         continue;
       }
@@ -184,74 +230,74 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
       console.log('  isPDF:', isPDF, 'isImage:', isImage);
 
       if (isPDF) {
-        // For PDF files, copy all pages from the source PDF
-        console.log('  Merging PDF pages...');
+        // For PDF files, copy all pages and add header to each
+        console.log('  Merging PDF pages with headers...');
         try {
           const sourcePdf = await PDFDocument.load(binaryData);
           const pageCount = sourcePdf.getPageCount();
           console.log(`  Source PDF has ${pageCount} pages`);
 
-          // Add a separator page with receipt info
+          // Add separator page first
           const separatorPage = pdfDoc.addPage([595, 842]);
-          separatorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
+          separatorPage.drawText(`Receipt ${receiptNum} of ${totalReceipts}`, {
             x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
           });
           separatorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
-            x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+            x: 50, y: 778, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
           });
-          const uploadDate = receipt.uploadedAt
-            ? format(new Date(receipt.uploadedAt), 'MMM d, yyyy h:mm a')
-            : 'Unknown';
           separatorPage.drawText(sanitizeForPdf(`Uploaded: ${uploadDate}`), {
-            x: 50, y: 762, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+            x: 50, y: 758, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
           });
-          separatorPage.drawText(`Pages: ${pageCount}`, {
-            x: 50, y: 744, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+          separatorPage.drawText(`Total pages in this receipt: ${pageCount}`, {
+            x: 50, y: 738, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
           });
-
-          // Draw a line separator
           separatorPage.drawLine({
             start: { x: 50, y: 720 },
             end: { x: 545, y: 720 },
             thickness: 0.5,
             color: rgb(0.78, 0.78, 0.78)
           });
-
-          // Info text
-          separatorPage.drawText('The following pages contain the original PDF receipt:', {
+          separatorPage.drawText('The following pages contain the original PDF receipt with headers:', {
             x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
           });
 
-          // Copy all pages from source PDF
+          // Copy each page from source PDF and add header
           const copiedPages = await pdfDoc.copyPages(sourcePdf, sourcePdf.getPageIndices());
-          copiedPages.forEach((page) => {
-            pdfDoc.addPage(page);
-          });
+          for (let pageIdx = 0; pageIdx < copiedPages.length; pageIdx++) {
+            const copiedPage = copiedPages[pageIdx];
+            // Add the page to the document first
+            pdfDoc.addPage(copiedPage);
+            // Draw header on the copied page
+            drawReceiptHeader(
+              copiedPage,
+              receiptNum,
+              totalReceipts,
+              receipt.fileName,
+              uploadDate,
+              pageIdx + 1,
+              pageCount
+            );
+          }
 
-          console.log(`  SUCCESS: Merged ${pageCount} pages from PDF`);
+          console.log(`  SUCCESS: Merged ${pageCount} pages from PDF with headers`);
         } catch (pdfError) {
           console.error('  FAILED to merge PDF:', pdfError);
           // Add error page
           const errorPage = pdfDoc.addPage([595, 842]);
-          errorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
-            x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
-          });
-          errorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
-            x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
-          });
+          drawReceiptHeader(errorPage, receiptNum, totalReceipts, receipt.fileName, uploadDate);
           errorPage.drawText('[PDF could not be embedded]', {
-            x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
+            x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
           });
           errorPage.drawText(sanitizeForPdf(`Error: ${pdfError.message}`), {
-            x: 50, y: 720, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+            x: 50, y: 680, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
           });
           errorPage.drawText('Original file is available in the receipts/ folder', {
-            x: 50, y: 700, size: 9, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
+            x: 50, y: 660, size: 9, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
           });
         }
       } else if (isImage) {
-        // For image files, embed the image
-        console.log('  Embedding image...');
+        // For image files, create page with header and embed image below
+        console.log('  Embedding image with header...');
         try {
           let image;
           const isPng = receipt.fileType === 'image/png' || base64Start.includes('data:image/png');
@@ -270,10 +316,10 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
             }
           }
 
-          // Calculate dimensions to fit on page
+          // Calculate dimensions to fit below header
           const imgDims = image.scale(1);
-          const maxWidth = 495; // 595 - 2*50 margin
-          const maxHeight = 692; // 842 - 100 top - 50 bottom
+          const maxWidth = 555; // 595 - 2*20 margin
+          const maxHeight = 720; // 842 - 60 header - 50 bottom - 12 margin
           let scale = 1;
 
           if (imgDims.width > maxWidth || imgDims.height > maxHeight) {
@@ -285,95 +331,88 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
           const scaledWidth = imgDims.width * scale;
           const scaledHeight = imgDims.height * scale;
 
-          // Add page with image
-          const imagePage = pdfDoc.addPage([595, 842]);
-
-          // Header
-          imagePage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
+          // Add separator page first
+          const separatorPage = pdfDoc.addPage([595, 842]);
+          separatorPage.drawText(`Receipt ${receiptNum} of ${totalReceipts}`, {
             x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
           });
-          imagePage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
-            x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+          separatorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
+            x: 50, y: 778, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
           });
-          const uploadDate = receipt.uploadedAt
-            ? format(new Date(receipt.uploadedAt), 'MMM d, yyyy h:mm a')
-            : 'Unknown';
-          imagePage.drawText(sanitizeForPdf(`Uploaded: ${uploadDate}`), {
-            x: 50, y: 762, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+          separatorPage.drawText(sanitizeForPdf(`Uploaded: ${uploadDate}`), {
+            x: 50, y: 758, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
           });
-
-          // Draw line
-          imagePage.drawLine({
-            start: { x: 50, y: 750 },
-            end: { x: 545, y: 750 },
+          separatorPage.drawText('Image receipt (1 page)', {
+            x: 50, y: 738, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+          });
+          separatorPage.drawLine({
+            start: { x: 50, y: 720 },
+            end: { x: 545, y: 720 },
             thickness: 0.5,
             color: rgb(0.78, 0.78, 0.78)
           });
+          separatorPage.drawText('The following page contains the receipt image with header:', {
+            x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
+          });
 
-          // Center the image
+          // Add page with image
+          const imagePage = pdfDoc.addPage([595, 842]);
+
+          // Draw header
+          drawReceiptHeader(imagePage, receiptNum, totalReceipts, receipt.fileName, uploadDate, 1, 1);
+
+          // Center the image below header
           const imgX = (595 - scaledWidth) / 2;
-          const imgY = 50; // Bottom margin
+          const imgY = 842 - 70 - scaledHeight; // Below header
 
           imagePage.drawImage(image, {
             x: imgX,
-            y: imgY,
+            y: Math.max(30, imgY), // Ensure at least 30px from bottom
             width: scaledWidth,
             height: scaledHeight
           });
 
-          console.log(`  SUCCESS: Image embedded (${scaledWidth.toFixed(0)}x${scaledHeight.toFixed(0)})`);
+          console.log(`  SUCCESS: Image embedded with header (${scaledWidth.toFixed(0)}x${scaledHeight.toFixed(0)})`);
         } catch (imgError) {
           console.error('  FAILED to embed image:', imgError);
           // Add error page
           const errorPage = pdfDoc.addPage([595, 842]);
-          errorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
-            x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
-          });
-          errorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
-            x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
-          });
+          drawReceiptHeader(errorPage, receiptNum, totalReceipts, receipt.fileName, uploadDate);
           errorPage.drawText('[Image could not be embedded]', {
-            x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
+            x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
           });
           errorPage.drawText(sanitizeForPdf(`Error: ${imgError.message}`), {
-            x: 50, y: 720, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+            x: 50, y: 680, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
           });
         }
       } else {
         // Unsupported format
         console.log('  Unsupported format');
         const infoPage = pdfDoc.addPage([595, 842]);
-        infoPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
-          x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
-        });
-        infoPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
-          x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
-        });
-        infoPage.drawText(sanitizeForPdf(`File Type: ${receipt.fileType || 'Unknown'}`), {
-          x: 50, y: 760, size: 10, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
-        });
+        drawReceiptHeader(infoPage, receiptNum, totalReceipts, receipt.fileName, uploadDate);
         infoPage.drawText('This file format is not supported for embedding.', {
-          x: 50, y: 720, size: 10, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+          x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
         });
         infoPage.drawText('Original file is available in the receipts/ folder', {
-          x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
+          x: 50, y: 680, size: 10, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
         });
       }
     }
 
-    // Add page numbers to all pages
+    // Add global page numbers to all pages
     const pages = pdfDoc.getPages();
     const totalPages = pages.length;
-    pages.forEach((page, idx) => {
+    for (let idx = 0; idx < pages.length; idx++) {
+      const page = pages[idx];
       const { width } = page.getSize();
       page.drawText(`Page ${idx + 1} of ${totalPages}`, {
         x: width / 2 - 30,
-        y: 20,
+        y: 15,
         size: 8,
         font: helveticaFont,
         color: rgb(0.61, 0.64, 0.69)
       });
-    });
+    }
 
     console.log('=== Receipts PDF created successfully ===');
     console.log(`Total pages: ${totalPages}`);
