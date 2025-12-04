@@ -244,8 +244,9 @@ function transformSingleExpense(expense, file, rawText) {
       date: expense.expense_date,
       checkInDate: expense.check_in_date,
       checkOutDate: expense.check_out_date,
-      // Use original amounts (in original currency) when available, not converted amounts
-      amount: roundTo2Decimals(expense.original_amount || expense.subtotal),
+      // Use original total (in original currency) when available - this is the full amount including taxes
+      // For flights: total includes fare + taxes (e.g., RM1312), NOT just fare (e.g., RM919)
+      amount: roundTo2Decimals(expense.original_amount || expense.total),
       tax: roundTo2Decimals(expense.tax),
       total: roundTo2Decimals(expense.original_amount || expense.total),
       currency: expense.original_currency || expense.currency || 'USD',
