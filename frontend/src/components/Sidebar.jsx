@@ -12,7 +12,9 @@ import {
   Filter,
   FileText,
   Settings,
-  Briefcase
+  Briefcase,
+  FolderOpen,
+  Clock
 } from 'lucide-react';
 import { useExpense } from '../context/ExpenseContext';
 import { exportToExcel, exportToCSV, generateReportSummary } from '../services/exportService';
@@ -160,6 +162,10 @@ export default function Sidebar() {
   // Get unique categories for filter
   const categories = [...new Set(expenses.map(e => e.category))];
 
+  // Get expense title for the claim
+  const expenseTitle = claimInfo.expenseTitle || claimInfo.businessPurpose || claimInfo.claimName;
+  const hasExpenseTitle = !!expenseTitle;
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
@@ -169,21 +175,45 @@ export default function Sidebar() {
         </h2>
       </div>
 
-      {/* Claim Info Summary */}
-      {(claimInfo.claimName || claimInfo.businessPurpose) && (
-        <div className="claim-info-summary">
-          <div className="claim-info-header">
-            <Briefcase size={16} />
-            <span>{claimInfo.claimName || 'Expense Claim'}</span>
-          </div>
-          {claimInfo.businessPurpose && (
-            <p className="claim-purpose">{claimInfo.businessPurpose.substring(0, 80)}...</p>
-          )}
-          {claimInfo.travelerName && (
-            <span className="claim-traveler">{claimInfo.travelerName}</span>
-          )}
+      {/* Saved Trip Claims Section */}
+      <div className="saved-claims-section">
+        <div className="saved-claims-header">
+          <FolderOpen size={14} />
+          <span>Saved Trip Claims</span>
         </div>
-      )}
+        {hasExpenseTitle ? (
+          <div className="current-claim-card active">
+            <div className="claim-card-title">
+              {expenseTitle.length > 40 ? expenseTitle.substring(0, 40) + '...' : expenseTitle}
+            </div>
+            <div className="claim-card-meta">
+              <span>
+                <Receipt size={12} />
+                {expenses.length} items
+              </span>
+              <span>
+                <DollarSign size={12} />
+                ${summary.totalAmount.toFixed(2)}
+              </span>
+              {claimInfo.submissionDate && (
+                <span>
+                  <Clock size={12} />
+                  {new Date(claimInfo.submissionDate).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="current-claim-card">
+            <div className="claim-card-title" style={{ color: 'var(--text-muted)' }}>
+              No trip claim created yet
+            </div>
+            <div className="claim-card-meta">
+              <span>Say "setup claim info" to create one</span>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Template indicator */}
       {companyTemplate && (
@@ -271,13 +301,13 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Expense List */}
+      {/* Expense Items List */}
       <div className="expenses-section">
         <div
           className="section-toggle"
           onClick={() => setShowExpenses(!showExpenses)}
         >
-          <h3>Expenses ({filteredExpenses.length})</h3>
+          <h3>Expense Items ({filteredExpenses.length})</h3>
           {showExpenses ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
         </div>
 
@@ -343,7 +373,7 @@ export default function Sidebar() {
         <div className="clear-section">
           <button className="btn-clear" onClick={handleClearAll}>
             <Trash2 size={16} />
-            Clear All Expenses
+            Clear All Expense Items
           </button>
         </div>
       )}
