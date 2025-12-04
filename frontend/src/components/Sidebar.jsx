@@ -124,6 +124,22 @@ export default function Sidebar() {
       addBotMessage(`⚠️ **Tip:** Set up your expense claim details first for a more professional report.\n\nSay "setup claim info" to add:\n• Claim Name\n• Business Purpose\n• Traveler Name\n• Department\n\nProceeding with PDF export...`);
     }
 
+    // Debug: Log uploadedReceipts state before export
+    console.log('=== Sidebar: handleExportPDF ===');
+    console.log('uploadedReceipts from context:', uploadedReceipts);
+    console.log('uploadedReceipts length:', uploadedReceipts?.length || 0);
+    if (uploadedReceipts && uploadedReceipts.length > 0) {
+      uploadedReceipts.forEach((r, i) => {
+        console.log(`Receipt ${i + 1}:`, {
+          id: r.id,
+          fileName: r.fileName,
+          fileType: r.fileType,
+          base64Length: r.base64?.length || 0,
+          hasBase64: !!r.base64
+        });
+      });
+    }
+
     setIsExporting(true);
 
     try {

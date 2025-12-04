@@ -292,6 +292,10 @@ export async function exportToPDF(expenses, claimInfo, uploadedReceipts, company
   }
 
   // ==================== RECEIPTS APPENDIX ====================
+  console.log('=== PDF Export: Receipts Section ===');
+  console.log('uploadedReceipts:', uploadedReceipts);
+  console.log('uploadedReceipts length:', uploadedReceipts?.length || 0);
+
   if (uploadedReceipts && uploadedReceipts.length > 0) {
     doc.addPage();
     yPosition = margin;
@@ -321,6 +325,16 @@ export async function exportToPDF(expenses, claimInfo, uploadedReceipts, company
     for (let i = 0; i < sortedReceipts.length; i++) {
       const receipt = sortedReceipts[i];
 
+      console.log(`=== Processing Receipt ${i + 1} ===`);
+      console.log('Receipt object:', {
+        id: receipt.id,
+        fileName: receipt.fileName,
+        fileType: receipt.fileType,
+        base64Length: receipt.base64?.length || 0,
+        base64Start: receipt.base64?.substring(0, 100) || 'NO BASE64',
+        uploadedAt: receipt.uploadedAt
+      });
+
       // Check if we need a new page
       if (yPosition > pageHeight - 100) {
         doc.addPage();
@@ -340,32 +354,64 @@ export async function exportToPDF(expenses, claimInfo, uploadedReceipts, company
       doc.text(`Uploaded: ${formatDateTime(receipt.uploadedAt)}`, margin, yPosition);
       yPosition += 10;
 
+      // Determine if this is an image we can embed
+      const isImage = receipt.fileType?.startsWith('image/') ||
+                      receipt.base64?.startsWith('data:image');
+      const hasBase64 = receipt.base64 && receipt.base64.length > 0;
+
+      console.log('isImage:', isImage, 'hasBase64:', hasBase64);
+
       // Try to embed image if it's an image type
-      if (receipt.base64 && (receipt.fileType.startsWith('image/') || receipt.base64.startsWith('data:image'))) {
+      if (hasBase64 && isImage) {
         try {
           const imgWidth = pageWidth - 2 * margin;
           const maxHeight = 150;
 
-          // Add the image
-          doc.addImage(receipt.base64, 'JPEG', margin, yPosition, imgWidth, maxHeight, undefined, 'MEDIUM');
+          // Determine the image format from the data URL or file type
+          let imageFormat = 'JPEG';
+          if (receipt.base64.includes('data:image/png')) {
+            imageFormat = 'PNG';
+          } else if (receipt.base64.includes('data:image/gif')) {
+            imageFormat = 'GIF';
+          } else if (receipt.base64.includes('data:image/webp')) {
+            imageFormat = 'WEBP';
+          } else if (receipt.fileType === 'image/png') {
+            imageFormat = 'PNG';
+          } else if (receipt.fileType === 'image/gif') {
+            imageFormat = 'GIF';
+          }
+
+          console.log('Adding image with format:', imageFormat);
+
+          // Add the image - jsPDF accepts data URLs directly
+          doc.addImage(receipt.base64, imageFormat, margin, yPosition, imgWidth, maxHeight, undefined, 'MEDIUM');
           yPosition += maxHeight + 15;
+          console.log('Image added successfully');
         } catch (err) {
+          console.error('Failed to add image:', err);
           doc.setFontSize(9);
           doc.setTextColor(239, 68, 68);
-          doc.text('[Image could not be embedded]', margin, yPosition);
+          doc.text(`[Image could not be embedded: ${err.message}]`, margin, yPosition);
           yPosition += 15;
         }
       } else {
+        console.log('Not embedding - either not an image or no base64 data');
         // For PDFs or unsupported formats, just note the attachment
         doc.setFillColor(248, 250, 252);
         doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 30, 2, 2, 'F');
         doc.setFontSize(9);
         doc.setTextColor(107, 114, 128);
         doc.text(`File: ${receipt.fileName}`, margin + 10, yPosition + 12);
-        doc.text(`Type: ${receipt.fileType}`, margin + 10, yPosition + 22);
+        doc.text(`Type: ${receipt.fileType || 'unknown'}`, margin + 10, yPosition + 22);
+        if (!hasBase64) {
+          doc.text(`(No image data available)`, margin + 10, yPosition + 32);
+          yPosition += 10;
+        }
         yPosition += 40;
       }
     }
+  } else {
+    console.log('No uploadedReceipts to include in PDF');
   }
 
   // ==================== FOOTER ON ALL PAGES ====================

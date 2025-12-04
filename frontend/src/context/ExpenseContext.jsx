@@ -259,6 +259,16 @@ function expenseReducer(state, action) {
       };
 
     case ACTIONS.ADD_UPLOADED_RECEIPT:
+      console.log('=== ExpenseContext: ADD_UPLOADED_RECEIPT ===');
+      console.log('Current uploadedReceipts count:', state.uploadedReceipts.length);
+      console.log('Adding receipt:', {
+        id: action.payload.id,
+        fileName: action.payload.fileName,
+        fileType: action.payload.fileType,
+        base64Length: action.payload.base64?.length || 0,
+        hasBase64: !!action.payload.base64
+      });
+      console.log('New uploadedReceipts count will be:', state.uploadedReceipts.length + 1);
       return {
         ...state,
         uploadedReceipts: [...state.uploadedReceipts, action.payload]
