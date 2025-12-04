@@ -1270,6 +1270,8 @@ body {
 .stat-content {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  text-align: right;
 }
 
 .stat-value {
