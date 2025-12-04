@@ -771,9 +771,9 @@ function populateClaimInfoFields(worksheet, headerRow, totalRows, claimInfo) {
   console.log('=== Populating Claim Info Fields ===');
 
   // Define field mappings: keyword patterns -> claimInfo field
-  // Note: Manager/Approver section fields are handled specially
+  // Note: Manager/Approver section fields and generic "Name:" are handled specially
   const fieldMappings = [
-    { patterns: ['employee name', 'name:', 'employee:'], field: 'employeeName', label: 'Employee Name' },
+    { patterns: ['employee name', 'employee:', 'claimant name', 'claimant:'], field: 'employeeName', label: 'Employee Name' },
     { patterns: ['position', 'job title', 'title:', 'designation'], field: 'jobPosition', label: 'Job Position' },
     { patterns: ['department', 'dept', 'division'], field: 'department', label: 'Department' },
     { patterns: ['expense title', 'claim title', 'report title', 'title of expense'], field: 'expenseTitle', label: 'Expense Title' },
@@ -843,12 +843,28 @@ function populateClaimInfoFields(worksheet, headerRow, totalRows, claimInfo) {
   scanForManagerSection(1, headerRow - 1, false);
   scanForManagerSection(headerRow + 1, totalRows, true);
 
-  // Second pass: Fill other fields, with context-aware handling for Position
+  // Second pass: Fill other fields, with context-aware handling for Position and Name
   const scanAndFillFields = (startRow, endRow, isFooter = false) => {
     for (let rowNum = startRow; rowNum <= endRow; rowNum++) {
       const row = worksheet.getRow(rowNum);
       row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
         const cellValue = cell.value ? String(cell.value).toLowerCase().trim() : '';
+
+        // Special handling for generic "Name:" field - context-aware
+        // If it's in Manager/Approver section, use approverName; otherwise use employeeName
+        if ((cellValue === 'name:' || cellValue === 'name') &&
+            !cellValue.includes('employee') && !cellValue.includes('claimant')) {
+          const inManagerSection = isInManagerSection(rowNum, colNumber);
+          const fieldToUse = inManagerSection ? 'approverName' : 'employeeName';
+          const labelToUse = inManagerSection ? 'Approver Name' : 'Employee Name';
+          const value = claimInfo[fieldToUse];
+
+          if (value) {
+            console.log(`Name field at row ${rowNum} is ${inManagerSection ? 'IN' : 'NOT in'} Manager section, using ${fieldToUse}`);
+            fillCell(rowNum, colNumber, cellValue, value, labelToUse, isFooter);
+          }
+          return;
+        }
 
         // Special handling for Position field - context-aware
         const positionPatterns = ['position', 'job title', 'title:', 'designation'];
