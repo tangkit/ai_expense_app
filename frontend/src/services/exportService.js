@@ -1325,11 +1325,35 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
         // Round to correct number of decimals for this currency
         const roundedAmount = decimals === 0 ? Math.round(localAmount) :
           Math.round(localAmount * Math.pow(10, decimals)) / Math.pow(10, decimals);
+
+        // Debug: Log original cell format BEFORE we change it
+        const originalFormat = cell.numFmt;
+
         cell.value = roundedAmount;
         // Apply currency number format based on local currency
         const currencyFormat = currencyConfig?.format ||
           (decimals === 0 ? `"${localCurrency} "#,##0` : `"${localCurrency} "#,##0.${'0'.repeat(decimals)}`);
+
+        // ExcelJS sometimes requires setting via style object to properly override template format
+        cell.style = {
+          ...cell.style,
+          numFmt: currencyFormat
+        };
+        // Also set directly as backup
         cell.numFmt = currencyFormat;
+
+        // Debug: Log the currency format being applied
+        console.log(`[Amount Local] Row ${rowIndex}: ${expense.vendor || expense.description}`, {
+          localCurrency,
+          localAmount,
+          roundedAmount,
+          originalFormat,
+          currencyConfig,
+          newFormat: currencyFormat,
+          'cell.numFmt after set': cell.numFmt,
+          'cell.style.numFmt': cell.style?.numFmt
+        });
+
         value = null; // Skip the default value assignment below
       }
       // Special handling for Conversion Rate / Exchange Rate column
