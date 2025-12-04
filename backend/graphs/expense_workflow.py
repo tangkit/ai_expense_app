@@ -1,12 +1,13 @@
 """LangGraph workflow for expense receipt processing."""
+from __future__ import annotations
 
 import json
 import base64
 import asyncio
 import io
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Annotated, TypedDict, Literal, Any
+from typing import Annotated, TypedDict, Literal, Any, TYPE_CHECKING
 
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -14,12 +15,6 @@ from PIL import Image
 
 from config import settings
 from services.exchange_rate import exchange_rate_service
-from api.schemas.expense import (
-    ExpenseCategory,
-    ExtractedExpense,
-    HotelNightItem,
-    MealCompanionInfo,
-)
 from prompts.templates import (
     RECEIPT_EXTRACTION_PROMPT,
     HOTEL_ITEMIZATION_PROMPT,
@@ -28,6 +23,15 @@ from prompts.templates import (
     HOTEL_SPECIALIST_SYSTEM,
     VALIDATOR_SYSTEM,
 )
+
+# Import schemas only for type checking to avoid circular imports
+if TYPE_CHECKING:
+    from api.schemas.expense import (
+        ExpenseCategory,
+        ExtractedExpense,
+        HotelNightItem,
+        MealCompanionInfo,
+    )
 
 
 def get_llm(provider: str = None):
@@ -96,9 +100,9 @@ class ExpenseWorkflowState(TypedDict):
     exchange_rate_date: date | None
     converted_amount: Decimal | None
 
-    # Output
-    expense: ExtractedExpense | None  # Legacy single expense
-    expenses: list[ExtractedExpense] | None  # Multiple expenses from document
+    # Output (using Any to avoid circular import issues with LangGraph)
+    expense: Any  # ExtractedExpense | None - Legacy single expense
+    expenses: list[Any] | None  # list[ExtractedExpense] - Multiple expenses from document
     validation_errors: list[str]
     validation_warnings: list[str]
 
@@ -287,6 +291,9 @@ def extract_json_from_response(text: str) -> dict | None:
 
 def categorize_expense(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
     """Verify and potentially correct the expense category."""
+    # Import at runtime to avoid circular imports
+    from api.schemas.expense import ExpenseCategory
+
     if state.get("error"):
         return state
 
@@ -719,8 +726,11 @@ def safe_date(value, default=None, fallback_to_today=True) -> date | None:
     return date.today() if fallback_to_today else None
 
 
-def build_single_expense(extracted: dict, hotel_itemization: list | None, confidence_score: float) -> ExtractedExpense:
+def build_single_expense(extracted: dict, hotel_itemization: list | None, confidence_score: float):
     """Build a single ExtractedExpense from extracted data."""
+    # Import schemas at runtime to avoid circular imports
+    from api.schemas.expense import ExpenseCategory, ExtractedExpense, HotelNightItem
+
     category = extracted.get("category", "other")
 
     # Validate category
