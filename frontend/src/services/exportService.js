@@ -11,8 +11,12 @@ import {
   HOTEL_ITEMIZED_COLUMNS
 } from '../constants/expenseTypes';
 
-// Configure pdf.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Configure pdf.js worker - use inline worker to avoid CORS/import issues
+// This disables the worker and processes PDFs on the main thread (slower but more reliable)
+pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+
+// Alternative: Use CDN with HTTPS
+// pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 /**
  * Convert a PDF file (as base64 data URL) to an array of image data URLs
