@@ -33,6 +33,22 @@ function generateFileName(baseName, employeeName, extension) {
 }
 
 /**
+ * Get file extension from MIME type
+ */
+function getExtensionFromMimeType(mimeType) {
+  const mimeToExt = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'image/heic': '.heic',
+    'image/heif': '.heif',
+    'application/pdf': '.pdf'
+  };
+  return mimeToExt[mimeType] || '.bin';
+}
+
+/**
  * Create a PDF containing all uploaded receipts
  */
 async function createReceiptsPDF(uploadedReceipts, employeeName) {
@@ -180,13 +196,13 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
         doc.text(`Format attempted: ${imgFormat || 'Unknown'}`, margin + 10, yPosition + 42);
       }
     } else if (receipt.fileType === 'application/pdf' || base64Start.includes('data:application/pdf')) {
-      // For PDF files, show info box (PDF embedding requires additional setup)
-      console.log('  PDF file detected, showing info box');
+      // For PDF files, show info box pointing to the original file in the zip
+      console.log('  PDF file detected, showing info box with reference to receipts folder');
       doc.setFillColor(240, 249, 255); // Light blue background
-      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 60, 3, 3, 'F');
+      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 70, 3, 3, 'F');
       doc.setDrawColor(59, 130, 246);
       doc.setLineWidth(0.5);
-      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 60, 3, 3, 'S');
+      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 70, 3, 3, 'S');
 
       doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
@@ -197,8 +213,15 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(71, 85, 105);
       doc.text(`File: ${receipt.fileName}`, margin + 10, yPosition + 30);
-      doc.text('(Please refer to the original PDF file for full receipt details)', margin + 10, yPosition + 45);
-      yPosition += 70;
+
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(22, 163, 74); // Green color
+      doc.text('Original PDF included in: receipts/ folder', margin + 10, yPosition + 45);
+
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(107, 114, 128);
+      doc.text('Open the PDF from the receipts folder for full details', margin + 10, yPosition + 58);
+      yPosition += 80;
     } else {
       // For unsupported formats, show info box
       console.log('  Unsupported format, showing info box');
@@ -1337,17 +1360,42 @@ export async function exportToExcel(expenses, filename = 'expense_report', claim
   const hasReceipts = uploadedReceipts && uploadedReceipts.length > 0;
 
   if (hasReceipts) {
-    console.log('Creating zip bundle with Excel and receipts PDF...');
-
-    // Create receipts PDF
-    const receiptsPdfBuffer = await createReceiptsPDF(uploadedReceipts, employeeName);
+    console.log('Creating zip bundle with Excel and receipt files...');
 
     // Create zip file
     const zip = new JSZip();
     zip.file(excelFilename, excelBuffer);
 
+    // Create a receipts folder in the zip
+    const receiptsFolder = zip.folder('receipts');
+
+    // Add each original receipt file to the zip
+    let addedFiles = 0;
+    uploadedReceipts.forEach((receipt, idx) => {
+      if (receipt.base64) {
+        try {
+          // Extract raw base64 data (remove data URL prefix)
+          const base64Data = receipt.base64.split(',')[1];
+          if (base64Data) {
+            // Use original filename, or generate one if not available
+            const fileName = receipt.fileName || `receipt_${idx + 1}${getExtensionFromMimeType(receipt.fileType)}`;
+            receiptsFolder.file(fileName, base64Data, { base64: true });
+            console.log(`  Added to zip: receipts/${fileName}`);
+            addedFiles++;
+          }
+        } catch (error) {
+          console.error(`  Failed to add receipt ${idx + 1} to zip:`, error);
+        }
+      }
+    });
+
+    console.log(`Added ${addedFiles} receipt files to zip`);
+
+    // Also create a receipts summary PDF with thumbnails for images
+    const receiptsPdfBuffer = await createReceiptsPDF(uploadedReceipts, employeeName);
     if (receiptsPdfBuffer) {
       zip.file(receiptsFilename, receiptsPdfBuffer);
+      console.log(`  Added receipts summary PDF: ${receiptsFilename}`);
     }
 
     // Generate and download zip
@@ -1360,7 +1408,12 @@ export async function exportToExcel(expenses, filename = 'expense_report', claim
 
     console.log(`Exported zip bundle: ${zipFilename}`);
     console.log(`  - ${excelFilename}`);
-    console.log(`  - ${receiptsFilename}`);
+    if (addedFiles > 0) {
+      console.log(`  - receipts/ folder (${addedFiles} files)`);
+    }
+    if (receiptsPdfBuffer) {
+      console.log(`  - ${receiptsFilename}`);
+    }
 
     return zipFilename;
   } else {
