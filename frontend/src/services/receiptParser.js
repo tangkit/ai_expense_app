@@ -209,6 +209,16 @@ function transformSingleExpense(expense, file, rawText) {
     });
   }
 
+  // Debug: Log currency fields from backend
+  console.log('[receiptParser] Currency fields from backend:', {
+    vendor: expense.vendor,
+    'expense.currency': expense.currency,
+    'expense.original_currency': expense.original_currency,
+    'expense.original_amount': expense.original_amount,
+    'expense.total': expense.total,
+    'expense.exchange_rate': expense.exchange_rate
+  });
+
   // Build currency conversion info
   const currencyConversion = expense.original_currency && expense.original_currency !== expense.currency ? {
     originalCurrency: expense.original_currency,
@@ -219,6 +229,8 @@ function transformSingleExpense(expense, file, rawText) {
     convertedCurrency: expense.currency,
     convertedAmount: roundTo2Decimals(expense.total)
   } : null;
+
+  console.log('[receiptParser] Built currencyConversion:', currencyConversion);
 
   // Build flight info
   const flightInfo = expense.airline ? {
@@ -249,7 +261,10 @@ function transformSingleExpense(expense, file, rawText) {
       amount: roundTo2Decimals(expense.original_amount || expense.total),
       tax: roundTo2Decimals(expense.tax),
       total: roundTo2Decimals(expense.original_amount || expense.total),
+      // Currency: use original_currency (before conversion) as the display currency
       currency: expense.original_currency || expense.currency || 'USD',
+      // Also store originalCurrency explicitly for export service
+      originalCurrency: expense.original_currency || null,
       receiptNumber: expense.receipt_number || '',
       paymentMethod: expense.payment_method || '',
       description: expense.description || '',

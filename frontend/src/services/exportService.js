@@ -50,6 +50,24 @@ function getExtensionFromMimeType(mimeType) {
 }
 
 /**
+ * Sanitize string for PDF WinAnsi encoding
+ * WinAnsi fonts cannot encode certain Unicode characters like U+202F (narrow no-break space)
+ */
+function sanitizeForPdf(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/\u202F/g, ' ')      // Narrow no-break space -> regular space
+    .replace(/\u00A0/g, ' ')      // Non-breaking space -> regular space
+    .replace(/[\u2000-\u200F]/g, ' ')  // Various Unicode spaces
+    .replace(/[\u2028-\u202F]/g, ' ')  // Line/paragraph separators
+    .replace(/[\u2018\u2019]/g, "'")   // Smart single quotes -> ASCII
+    .replace(/[\u201C\u201D]/g, '"')   // Smart double quotes -> ASCII
+    .replace(/\u2013/g, '-')      // En dash -> hyphen
+    .replace(/\u2014/g, '--')     // Em dash -> double hyphen
+    .replace(/[^\x00-\x7F\xA0-\xFF]/g, ''); // Remove other non-WinAnsi chars
+}
+
+/**
  * Create a PDF containing all uploaded receipts using pdf-lib
  * This allows proper merging of PDF receipts and embedding of images
  */
@@ -97,7 +115,7 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
     let yPos = height - 130;
 
     if (employeeName) {
-      titlePage.drawText(`Employee: ${employeeName}`, {
+      titlePage.drawText(sanitizeForPdf(`Employee: ${employeeName}`), {
         x: width / 2 - 80,
         y: yPos,
         size: 12,
@@ -116,7 +134,7 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
     });
     yPos -= 20;
 
-    titlePage.drawText(`Generated: ${format(new Date(), 'MMMM d, yyyy')}`, {
+    titlePage.drawText(sanitizeForPdf(`Generated: ${format(new Date(), 'MMMM d, yyyy')}`), {
       x: width / 2 - 70,
       y: yPos,
       size: 12,
@@ -144,7 +162,7 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
         errorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
           x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
         });
-        errorPage.drawText(`File: ${receipt.fileName}`, {
+        errorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
           x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
         });
         errorPage.drawText('Receipt data not available - file was not properly stored.', {
@@ -178,13 +196,13 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
           separatorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
             x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
           });
-          separatorPage.drawText(`File: ${receipt.fileName}`, {
+          separatorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
             x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
           });
           const uploadDate = receipt.uploadedAt
             ? format(new Date(receipt.uploadedAt), 'MMM d, yyyy h:mm a')
             : 'Unknown';
-          separatorPage.drawText(`Uploaded: ${uploadDate}`, {
+          separatorPage.drawText(sanitizeForPdf(`Uploaded: ${uploadDate}`), {
             x: 50, y: 762, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
           });
           separatorPage.drawText(`Pages: ${pageCount}`, {
@@ -218,13 +236,13 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
           errorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
             x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
           });
-          errorPage.drawText(`File: ${receipt.fileName}`, {
+          errorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
             x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
           });
           errorPage.drawText('[PDF could not be embedded]', {
             x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
           });
-          errorPage.drawText(`Error: ${pdfError.message}`, {
+          errorPage.drawText(sanitizeForPdf(`Error: ${pdfError.message}`), {
             x: 50, y: 720, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
           });
           errorPage.drawText('Original file is available in the receipts/ folder', {
@@ -274,13 +292,13 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
           imagePage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
             x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
           });
-          imagePage.drawText(`File: ${receipt.fileName}`, {
+          imagePage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
             x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
           });
           const uploadDate = receipt.uploadedAt
             ? format(new Date(receipt.uploadedAt), 'MMM d, yyyy h:mm a')
             : 'Unknown';
-          imagePage.drawText(`Uploaded: ${uploadDate}`, {
+          imagePage.drawText(sanitizeForPdf(`Uploaded: ${uploadDate}`), {
             x: 50, y: 762, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
           });
 
@@ -311,13 +329,13 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
           errorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
             x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
           });
-          errorPage.drawText(`File: ${receipt.fileName}`, {
+          errorPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
             x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
           });
           errorPage.drawText('[Image could not be embedded]', {
             x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
           });
-          errorPage.drawText(`Error: ${imgError.message}`, {
+          errorPage.drawText(sanitizeForPdf(`Error: ${imgError.message}`), {
             x: 50, y: 720, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
           });
         }
@@ -328,10 +346,10 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
         infoPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
           x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
         });
-        infoPage.drawText(`File: ${receipt.fileName}`, {
+        infoPage.drawText(sanitizeForPdf(`File: ${receipt.fileName}`), {
           x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
         });
-        infoPage.drawText(`File Type: ${receipt.fileType || 'Unknown'}`, {
+        infoPage.drawText(sanitizeForPdf(`File Type: ${receipt.fileType || 'Unknown'}`), {
           x: 50, y: 760, size: 10, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
         });
         infoPage.drawText('This file format is not supported for embedding.', {
@@ -1264,22 +1282,30 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
     const rowIndex = dataStartRow + expenseIndex;
 
     // Get the local currency (original currency from receipt, before any conversion)
-    // Priority: currencyConversion.originalCurrency > currency > 'SGD'
+    // Priority: currencyConversion.originalCurrency > originalCurrency > currency > 'SGD'
     // This ensures Amount (Local) shows the ACTUAL receipt currency, not the reimbursement currency
     const localCurrency = (
       expense.currencyConversion?.originalCurrency ||
+      expense.originalCurrency ||  // Direct field if exists
       expense.currency ||
       'SGD'
     ).toUpperCase();
     const exchangeRate = exchangeRates[localCurrency] || 1;
     const isSGD = localCurrency === 'SGD';
 
+    // Debug: Log currency info for EVERY expense to trace the issue
+    console.log(`[Expense ${expenseIndex + 1}] ${expense.vendor || expense.description}:`, {
+      'expense.currency': expense.currency,
+      'expense.originalCurrency': expense.originalCurrency,
+      'expense.currencyConversion': expense.currencyConversion,
+      'detected localCurrency': localCurrency,
+      'isSGD': isSGD,
+      'category': expense.category
+    });
+
     // Log for first row to debug column mapping
     if (expenseIndex === 0) {
       console.log('Template columns:', companyTemplate.columns);
-      console.log('First expense - currency:', expense.currency,
-                  'currencyConversion:', expense.currencyConversion,
-                  'localCurrency:', localCurrency, 'isSGD:', isSGD, 'exchangeRate:', exchangeRate);
     }
 
     companyTemplate.columns.forEach((colName, idx) => {
