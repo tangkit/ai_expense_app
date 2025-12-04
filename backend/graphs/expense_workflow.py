@@ -30,9 +30,16 @@ from prompts.templates import (
 )
 
 
-def get_llm():
-    """Get the configured LLM instance."""
-    if settings.llm_provider == "anthropic":
+def get_llm(provider: str = None):
+    """Get the configured LLM instance.
+
+    Args:
+        provider: Force a specific provider ('anthropic' or 'openai').
+                  If None, uses the configured default.
+    """
+    use_provider = provider or settings.llm_provider
+
+    if use_provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
 
         return ChatAnthropic(
@@ -48,6 +55,22 @@ def get_llm():
             api_key=settings.openai_api_key,
             max_tokens=4096,
         )
+
+
+def get_llm_with_fallback():
+    """Get LLM with automatic fallback support.
+
+    Tries the primary provider first, falls back to secondary if primary fails.
+    Returns tuple of (llm, provider_name).
+    """
+    primary = settings.llm_provider
+    secondary = "openai" if primary == "anthropic" else "anthropic"
+
+    # Check if we have keys for fallback
+    has_anthropic = bool(settings.anthropic_api_key)
+    has_openai = bool(settings.openai_api_key)
+
+    return get_llm(primary), primary, secondary if (has_anthropic and has_openai) else None
 
 
 class ExpenseWorkflowState(TypedDict):
@@ -86,8 +109,9 @@ class ExpenseWorkflowState(TypedDict):
 
 
 def parse_receipt(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
-    """Parse the receipt using vision LLM."""
-    llm = get_llm()
+    """Parse the receipt using vision LLM with automatic fallback."""
+    import logging
+    logger = logging.getLogger(__name__)
 
     file_content = state["file_content_base64"]
     file_type = state["file_type"]
@@ -162,40 +186,72 @@ def parse_receipt(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
         HumanMessage(content=content),
     ]
 
-    try:
-        response = llm.invoke(messages)
-        response_text = response.content
+    # Try primary provider, fallback to secondary if it fails
+    primary_llm, primary_provider, fallback_provider = get_llm_with_fallback()
+    providers_to_try = [(primary_llm, primary_provider)]
 
-        # Extract JSON from response
-        extracted_data = extract_json_from_response(response_text)
+    if fallback_provider:
+        providers_to_try.append((get_llm(fallback_provider), fallback_provider))
 
-        if extracted_data:
-            state["raw_text"] = response_text
-            state["confidence_score"] = 0.85
+    last_error = None
+    for llm, provider_name in providers_to_try:
+        try:
+            logger.info(f"Attempting receipt parsing with {provider_name}...")
+            print(f"[PARSE] Trying {provider_name}...")
 
-            # Handle new multi-receipt format
-            if "receipts" in extracted_data and isinstance(extracted_data["receipts"], list):
-                receipts = extracted_data["receipts"]
-                state["extracted_receipts"] = receipts
-                # For backward compatibility, also set extracted_data to first receipt
-                if receipts:
-                    state["extracted_data"] = receipts[0]
-                    state["category"] = receipts[0].get("category", "other")
+            response = llm.invoke(messages)
+            response_text = response.content
+
+            # Extract JSON from response
+            extracted_data = extract_json_from_response(response_text)
+
+            if extracted_data:
+                state["raw_text"] = response_text
+                state["confidence_score"] = 0.85
+
+                # Handle new multi-receipt format
+                if "receipts" in extracted_data and isinstance(extracted_data["receipts"], list):
+                    receipts = extracted_data["receipts"]
+                    state["extracted_receipts"] = receipts
+                    # For backward compatibility, also set extracted_data to first receipt
+                    if receipts:
+                        state["extracted_data"] = receipts[0]
+                        state["category"] = receipts[0].get("category", "other")
+                else:
+                    # Legacy single receipt format - wrap in array
+                    state["extracted_receipts"] = [extracted_data]
+                    state["extracted_data"] = extracted_data
+                    state["category"] = extracted_data.get("category", "other")
+
+                state["processing_stage"] = "parsed"
+                logger.info(f"Receipt parsed successfully with {provider_name}")
+                print(f"[PARSE] Success with {provider_name}")
+                return state
             else:
-                # Legacy single receipt format - wrap in array
-                state["extracted_receipts"] = [extracted_data]
-                state["extracted_data"] = extracted_data
-                state["category"] = extracted_data.get("category", "other")
+                last_error = "Failed to extract structured data from receipt"
 
-            state["processing_stage"] = "parsed"
-        else:
-            state["error"] = "Failed to extract structured data from receipt"
-            state["processing_stage"] = "error"
+        except Exception as e:
+            error_str = str(e)
+            last_error = error_str
+            logger.warning(f"{provider_name} failed: {error_str}")
+            print(f"[PARSE] {provider_name} failed: {error_str[:100]}...")
 
-    except Exception as e:
-        state["error"] = f"Receipt parsing failed: {str(e)}"
-        state["processing_stage"] = "error"
+            # Check if this is an authentication/API error that warrants fallback
+            is_auth_error = any(code in error_str for code in ["401", "403", "invalid_api_key", "authentication"])
+            is_rate_limit = "429" in error_str or "rate_limit" in error_str.lower()
+            is_server_error = any(code in error_str for code in ["500", "502", "503", "504"])
 
+            if is_auth_error or is_rate_limit or is_server_error:
+                logger.info(f"Fallback triggered due to {provider_name} error, trying next provider...")
+                print(f"[PARSE] Fallback triggered, trying next provider...")
+                continue
+            else:
+                # Other errors - don't fallback, just fail
+                break
+
+    # All providers failed
+    state["error"] = f"Receipt parsing failed: {last_error}"
+    state["processing_stage"] = "error"
     return state
 
 
@@ -250,7 +306,7 @@ def categorize_expense(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
 
 
 def itemize_hotel(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
-    """Generate per-night itemization for hotel receipts."""
+    """Generate per-night itemization for hotel receipts with LLM fallback."""
     if state.get("error"):
         return state
 
@@ -259,7 +315,6 @@ def itemize_hotel(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
         return state
 
     extracted = state.get("extracted_data", {})
-    llm = get_llm()
 
     # Check if itemization already exists
     if extracted.get("hotel_nights"):
@@ -301,24 +356,37 @@ def itemize_hotel(state: ExpenseWorkflowState) -> ExpenseWorkflowState:
         HumanMessage(content=prompt),
     ]
 
-    try:
-        response = llm.invoke(messages)
-        itemization = extract_json_from_response(response.content)
+    # Try with fallback support
+    primary_llm, primary_provider, fallback_provider = get_llm_with_fallback()
+    providers_to_try = [(primary_llm, primary_provider)]
+    if fallback_provider:
+        providers_to_try.append((get_llm(fallback_provider), fallback_provider))
 
-        if itemization and isinstance(itemization, list):
-            state["hotel_itemization"] = itemization
-        else:
-            # Generate default itemization
-            state["hotel_itemization"] = generate_default_hotel_itemization(
-                check_in, check_out, float(total)
-            )
+    for llm, provider_name in providers_to_try:
+        try:
+            print(f"[HOTEL] Trying {provider_name} for itemization...")
+            response = llm.invoke(messages)
+            itemization = extract_json_from_response(response.content)
 
-    except Exception as e:
-        # Fallback to default itemization
-        state["hotel_itemization"] = generate_default_hotel_itemization(
-            check_in, check_out, float(total)
-        )
+            if itemization and isinstance(itemization, list):
+                state["hotel_itemization"] = itemization
+                print(f"[HOTEL] Success with {provider_name}")
+                state["processing_stage"] = "itemized"
+                return state
+        except Exception as e:
+            error_str = str(e)
+            print(f"[HOTEL] {provider_name} failed: {error_str[:100]}...")
+            # Check if fallback should be triggered
+            is_fallback_error = any(code in error_str for code in ["401", "403", "429", "500", "502", "503", "504"])
+            if is_fallback_error:
+                continue
+            break
 
+    # All providers failed - use default itemization
+    print("[HOTEL] Using default itemization")
+    state["hotel_itemization"] = generate_default_hotel_itemization(
+        check_in, check_out, float(total)
+    )
     state["processing_stage"] = "itemized"
     return state
 
