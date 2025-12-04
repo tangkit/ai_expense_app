@@ -386,7 +386,7 @@ export async function parseReceiptSimulated(file) {
       };
 
       // Simulate different receipt types based on filename
-      if (/hotel|marriott|hilton|hyatt/i.test(fileName)) {
+      if (/hotel|marriott|hilton|hyatt|novotel|accor|ibis|pullman|sofitel|sheraton|westin|intercontinental|crowne|holiday.?inn|radisson|best.?western|fairfield|courtyard|residence.?inn|doubletree|hampton|folio/i.test(fileName)) {
         const nights = Math.floor(Math.random() * 4) + 1;
         const baseRate = 150 + Math.random() * 200;
         const total = baseRate * nights * 1.15;
@@ -397,7 +397,18 @@ export async function parseReceiptSimulated(file) {
           ...extractedData.extracted,
           vendor: fileName.includes('marriott') ? 'Marriott Hotels' :
                   fileName.includes('hilton') ? 'Hilton Hotels' :
-                  fileName.includes('hyatt') ? 'Hyatt Hotels' : 'Hotel Stay',
+                  fileName.includes('hyatt') ? 'Hyatt Hotels' :
+                  fileName.includes('novotel') ? 'Novotel' :
+                  fileName.includes('accor') ? 'Accor Hotels' :
+                  fileName.includes('ibis') ? 'ibis Hotels' :
+                  fileName.includes('pullman') ? 'Pullman Hotels' :
+                  fileName.includes('sofitel') ? 'Sofitel' :
+                  fileName.includes('sheraton') ? 'Sheraton Hotels' :
+                  fileName.includes('westin') ? 'Westin Hotels' :
+                  fileName.includes('intercontinental') ? 'InterContinental' :
+                  fileName.includes('crowne') ? 'Crowne Plaza' :
+                  fileName.includes('holiday') ? 'Holiday Inn' :
+                  fileName.includes('radisson') ? 'Radisson Hotels' : 'Hotel Stay',
           category: EXPENSE_CATEGORIES.HOTEL,
           date: format(checkIn, 'yyyy-MM-dd'),
           checkInDate: format(checkIn, 'yyyy-MM-dd'),
@@ -430,17 +441,30 @@ export async function parseReceiptSimulated(file) {
           description: 'Rideshare trip'
         };
 
-      } else if (/flight|airline|delta|united|american/i.test(fileName)) {
-        const amount = 200 + Math.random() * 800;
+      } else if (/flight|airline|ticket|delta|united|american|batik|airasia|malaysia.?airlines|singapore.?airlines|scoot|cathay|emirates|qantas|jetstar/i.test(fileName)) {
+        // Check if it's a Malaysian airline (use MYR)
+        const isMalaysianAirline = /batik|airasia|malaysia/i.test(fileName);
+        const amount = isMalaysianAirline ? (800 + Math.random() * 800) : (200 + Math.random() * 800);
+        const currency = isMalaysianAirline ? 'MYR' : 'USD';
         extractedData.extracted = {
           ...extractedData.extracted,
-          vendor: fileName.includes('delta') ? 'Delta Airlines' :
+          vendor: fileName.includes('batik') ? 'Batik Air' :
+                  fileName.includes('airasia') ? 'AirAsia' :
+                  fileName.includes('malaysia') ? 'Malaysia Airlines' :
+                  fileName.includes('singapore') ? 'Singapore Airlines' :
+                  fileName.includes('delta') ? 'Delta Airlines' :
                   fileName.includes('united') ? 'United Airlines' :
-                  fileName.includes('american') ? 'American Airlines' : 'Airlines',
+                  fileName.includes('american') ? 'American Airlines' :
+                  fileName.includes('scoot') ? 'Scoot' :
+                  fileName.includes('cathay') ? 'Cathay Pacific' :
+                  fileName.includes('emirates') ? 'Emirates' :
+                  fileName.includes('qantas') ? 'Qantas' :
+                  fileName.includes('jetstar') ? 'Jetstar' : 'Airlines',
           category: EXPENSE_CATEGORIES.FLIGHT,
           amount: Math.round(amount * 100) / 100,
           tax: Math.round(amount * 0.075 * 100) / 100,
           total: Math.round(amount * 1.075 * 100) / 100,
+          currency: currency,
           receiptNumber: `FL${Date.now().toString().slice(-8)}`,
           paymentMethod: 'Corporate Card',
           description: 'Flight booking'
