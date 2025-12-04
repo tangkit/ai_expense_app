@@ -15,7 +15,6 @@
     "jspdf": "^2.5.2",
     "jszip": "^3.10.1",
     "lucide-react": "^0.555.0",
-    "pdfjs-dist": "^5.4.449",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-dropzone": "^14.3.8",

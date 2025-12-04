@@ -3,95 +3,12 @@ import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
 import { format } from 'date-fns';
-import * as pdfjsLib from 'pdfjs-dist';
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABELS,
   SPREADSHEET_COLUMNS,
   HOTEL_ITEMIZED_COLUMNS
 } from '../constants/expenseTypes';
-
-// Configure pdf.js worker - use inline worker to avoid CORS/import issues
-// This disables the worker and processes PDFs on the main thread (slower but more reliable)
-pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-
-// Alternative: Use CDN with HTTPS
-// pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-
-/**
- * Convert a PDF file (as base64 data URL) to an array of image data URLs
- * Each page becomes one image
- */
-async function convertPdfToImages(base64DataUrl, maxPages = 5) {
-  console.log('=== Converting PDF to images ===');
-
-  // Extract raw base64 data (remove data URL prefix)
-  const base64Data = base64DataUrl.split(',')[1];
-  if (!base64Data) {
-    console.error('Invalid base64 data URL');
-    return [];
-  }
-
-  // Convert base64 to Uint8Array
-  const binaryString = atob(base64Data);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-
-  try {
-    // Load the PDF document
-    const loadingTask = pdfjsLib.getDocument({ data: bytes });
-    const pdf = await loadingTask.promise;
-
-    console.log(`PDF loaded: ${pdf.numPages} pages`);
-
-    const images = [];
-    const pagesToRender = Math.min(pdf.numPages, maxPages);
-
-    for (let pageNum = 1; pageNum <= pagesToRender; pageNum++) {
-      console.log(`Rendering page ${pageNum}/${pagesToRender}`);
-
-      const page = await pdf.getPage(pageNum);
-
-      // Set scale for good quality (1.5 = 150% of original size)
-      const scale = 1.5;
-      const viewport = page.getViewport({ scale });
-
-      // Create a canvas to render the page
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d');
-      canvas.height = viewport.height;
-      canvas.width = viewport.width;
-
-      // Render the page to canvas
-      await page.render({
-        canvasContext: context,
-        viewport: viewport
-      }).promise;
-
-      // Convert canvas to JPEG data URL
-      const imageDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      images.push({
-        dataUrl: imageDataUrl,
-        width: viewport.width,
-        height: viewport.height,
-        pageNum: pageNum
-      });
-
-      console.log(`Page ${pageNum} rendered: ${viewport.width}x${viewport.height}`);
-    }
-
-    if (pdf.numPages > maxPages) {
-      console.log(`Note: Only rendered first ${maxPages} pages of ${pdf.numPages} total`);
-    }
-
-    return images;
-  } catch (error) {
-    console.error('Error converting PDF to images:', error);
-    return [];
-  }
-}
 
 /**
  * Sanitize a string for use in filenames
@@ -263,61 +180,25 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
         doc.text(`Format attempted: ${imgFormat || 'Unknown'}`, margin + 10, yPosition + 42);
       }
     } else if (receipt.fileType === 'application/pdf' || base64Start.includes('data:application/pdf')) {
-      // For PDF files, convert pages to images and embed them
-      console.log('  PDF file detected, converting to images...');
-      try {
-        const pdfImages = await convertPdfToImages(receipt.base64, 5); // Max 5 pages per PDF
+      // For PDF files, show info box (PDF embedding requires additional setup)
+      console.log('  PDF file detected, showing info box');
+      doc.setFillColor(240, 249, 255); // Light blue background
+      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 60, 3, 3, 'F');
+      doc.setDrawColor(59, 130, 246);
+      doc.setLineWidth(0.5);
+      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 60, 3, 3, 'S');
 
-        if (pdfImages.length === 0) {
-          throw new Error('Failed to convert PDF pages');
-        }
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(30, 64, 175);
+      doc.text('PDF Receipt', margin + 10, yPosition + 15);
 
-        console.log(`  Converted ${pdfImages.length} PDF pages to images`);
-
-        // Add each page as an image
-        for (let pageIdx = 0; pageIdx < pdfImages.length; pageIdx++) {
-          const pageImage = pdfImages[pageIdx];
-
-          if (pageIdx > 0) {
-            // Add new page for subsequent PDF pages
-            doc.addPage();
-            yPosition = margin;
-
-            // Page header for continuation
-            doc.setFontSize(10);
-            doc.setFont('helvetica', 'normal');
-            doc.setTextColor(107, 114, 128);
-            doc.text(`${receipt.fileName} - Page ${pageImage.pageNum}`, margin, yPosition);
-            yPosition += 10;
-          }
-
-          const imgWidth = pageWidth - 2 * margin;
-          const maxHeight = pageHeight - yPosition - margin - 10;
-
-          // Calculate aspect ratio to fit within bounds
-          const aspectRatio = pageImage.width / pageImage.height;
-          let displayWidth = imgWidth;
-          let displayHeight = imgWidth / aspectRatio;
-
-          if (displayHeight > maxHeight) {
-            displayHeight = maxHeight;
-            displayWidth = maxHeight * aspectRatio;
-          }
-
-          doc.addImage(pageImage.dataUrl, 'JPEG', margin, yPosition, displayWidth, displayHeight, undefined, 'MEDIUM');
-          console.log(`  Added PDF page ${pageImage.pageNum} to output`);
-        }
-      } catch (pdfErr) {
-        console.error('  Failed to convert PDF:', pdfErr);
-        doc.setFillColor(254, 242, 242);
-        doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 50, 3, 3, 'F');
-        doc.setFontSize(10);
-        doc.setTextColor(185, 28, 28);
-        doc.text('[PDF could not be converted to images]', margin + 10, yPosition + 15);
-        doc.setTextColor(107, 114, 128);
-        doc.text(`File: ${receipt.fileName}`, margin + 10, yPosition + 28);
-        doc.text(`Error: ${pdfErr.message}`, margin + 10, yPosition + 41);
-      }
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(71, 85, 105);
+      doc.text(`File: ${receipt.fileName}`, margin + 10, yPosition + 30);
+      doc.text('(Please refer to the original PDF file for full receipt details)', margin + 10, yPosition + 45);
+      yPosition += 70;
     } else {
       // For unsupported formats, show info box
       console.log('  Unsupported format, showing info box');
