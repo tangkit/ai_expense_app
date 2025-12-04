@@ -44,7 +44,15 @@ HOTEL NAME DETECTION TIPS:
 - Look at the TOP of the receipt for the hotel name/logo
 - Common patterns: "[Hotel Brand] [Location]" like "Hilton Singapore", "Marriott Kuala Lumpur"
 - Look for letterhead, header text, or "INVOICE FROM:" sections
-- Hotel brands: Marriott, Hilton, Hyatt, IHG, Accor, Shangri-La, Four Seasons, Ritz-Carlton, Westin, Sheraton, Holiday Inn, Crowne Plaza, DoubleTree, Hampton Inn, Courtyard, Fairfield, Residence Inn, etc.
+- Hotel brands: Marriott, Hilton, Hyatt, IHG, Accor, Shangri-La, Four Seasons, Ritz-Carlton, Westin, Sheraton, Holiday Inn, Crowne Plaza, DoubleTree, Hampton Inn, Courtyard, Fairfield, Residence Inn, Novotel, ibis, Pullman, Sofitel, etc.
+
+HOTEL CURRENCY DETECTION:
+- Malaysian hotels (Kuala Lumpur, Penang, etc.): Currency is MYR (RM)
+- Singapore hotels: Currency is SGD (S$)
+- Thai hotels (Bangkok, Phuket, etc.): Currency is THB (฿)
+- Indonesian hotels (Bali, Jakarta, etc.): Currency is IDR (Rp)
+- **Extract the EXACT currency shown on the receipt - DO NOT default to USD**
+- Hotel rates in SEA are typically: MYR 200-1000/night, SGD 150-500/night, THB 2000-10000/night
 
 For MEAL receipts:
 - Note if the total exceeds $25 (requires companion information for compliance)
@@ -56,22 +64,31 @@ DETECTING MULTIPLE RECEIPTS:
 - Multiple taxi/cab receipts are common on a single scanned page
 - Each distinct transaction should be a separate expense entry
 
-CRITICAL CURRENCY DETECTION (DO NOT DEFAULT TO USD):
+CRITICAL CURRENCY DETECTION - NEVER DEFAULT TO USD FOR ASIAN RECEIPTS:
 - Look for currency symbols: RM (MYR), S$ (SGD), ฿ (THB), $ (could be USD, SGD, AUD), € (EUR), £ (GBP)
 - Look for explicit currency codes: MYR, SGD, USD, EUR, IDR, THB, etc.
-- Malaysian receipts show "RM", "MYR", or "Ringgit"
-- Singapore receipts show "S$" or "SGD"
+- Malaysian receipts show "RM", "MYR", or "Ringgit" - amounts are typically 100-10000 range
+- Singapore receipts show "S$" or "SGD" - amounts are typically 50-2000 range
 - Look for amounts like "RM 1,312.00" or "1,312.00 MYR"
-- Always return the ORIGINAL currency from the receipt, not converted amounts
+- **ALWAYS return the ORIGINAL currency from the receipt - DO NOT convert or change amounts**
+- **DO NOT default to USD for Southeast Asian receipts/flights**
 
-AIRLINE-BASED CURRENCY INFERENCE (if no explicit currency symbol found):
-- Batik Air, AirAsia, Malaysia Airlines, Firefly, Malindo Air → currency: "MYR"
+AIRLINE-BASED CURRENCY - USE THESE RULES:
+- **Batik Air** → currency MUST be "MYR" (Malaysian Ringgit) - typical fares: RM 200-2000
+- AirAsia, Malaysia Airlines, Firefly, Malindo Air → currency: "MYR"
 - Singapore Airlines, Scoot, SilkAir, Jetstar Asia → currency: "SGD"
 - Thai Airways, Bangkok Airways, Thai AirAsia → currency: "THB"
 - Garuda Indonesia, Lion Air, Citilink → currency: "IDR"
-- For flights departing from Malaysia (KUL, PEN, BKI, etc.) → likely MYR
+- For flights departing from Malaysia (KUL, PEN, BKI, etc.) → currency: "MYR"
 
-IMPORTANT: Batik Air is a Malaysian/Indonesian airline. If the ticket shows Batik Air, the currency is most likely MYR (Malaysian Ringgit) or IDR (Indonesian Rupiah). Look carefully for "RM" or amounts in the 1000+ range which indicates MYR
+**BATIK AIR SPECIFIC INSTRUCTIONS:**
+- Batik Air is a Malaysian airline (and Indonesian airline - Batik Air Indonesia)
+- Batik Air tickets from Malaysia are ALWAYS in MYR (Malaysian Ringgit)
+- Typical Batik Air fare: RM 500 - RM 2000 (NOT $50-200 USD)
+- If you see "Batik Air" or "OD" (flight code), the currency is MYR
+- Look for the TOTAL AMOUNT which includes fare + taxes (e.g., RM 1312.00)
+- The fare might show separately (e.g., RM 919) but extract the TOTAL including all taxes
+- NEVER return USD for a Batik Air receipt - it's ALWAYS MYR or IDR
 
 RESPONSE FORMAT:
 Return your response as a valid JSON object with this structure:
