@@ -2,70 +2,40 @@
    Expense Claim Assistant - Main Styles
    =================================== */
 
-/* CSS Variables - Modern Tech Dark Theme */
+/* CSS Variables - Modern Dark Blue Theme */
 :root {
-  /* Primary colors - Vibrant cyan/teal accent */
-  --primary-color: #06b6d4;
-  --primary-hover: #22d3ee;
-  --primary-dark: #0891b2;
-  --primary-light: rgba(6, 182, 212, 0.15);
-  --primary-glow: rgba(6, 182, 212, 0.4);
-
-  /* Secondary accent - Purple/violet */
-  --secondary-color: #a855f7;
-  --secondary-hover: #c084fc;
-  --secondary-light: rgba(168, 85, 247, 0.15);
-
-  /* Accent colors */
-  --accent-gradient: linear-gradient(135deg, #06b6d4 0%, #a855f7 100%);
-  --accent-gradient-hover: linear-gradient(135deg, #22d3ee 0%, #c084fc 100%);
-
-  /* Status colors */
+  --primary-color: #225ebe;
+  --primary-hover: #60a5fa;
+  --dark-blue-color: #2b1cb1;
+  --primary-light: rgba(59, 130, 246, 0.15);
+  --primary-glow: rgba(59, 130, 246, 0.3);
+  --secondary-color: #8b5cf6;
   --success-color: #10b981;
-  --success-light: rgba(16, 185, 129, 0.15);
   --warning-color: #f59e0b;
-  --warning-light: rgba(245, 158, 11, 0.15);
   --error-color: #ef4444;
-  --error-light: rgba(239, 68, 68, 0.15);
-
-  /* Background layers - Deep blue-gray scale */
-  --background: #0a0f1a;
-  --background-secondary: #0d1424;
-  --surface: #111827;
-  --surface-elevated: #1a2332;
-  --surface-secondary: #1f2937;
-  --surface-hover: #2d3748;
-
-  /* Sidebar - Slightly purple tinted */
-  --sidebar-bg: linear-gradient(180deg, #12162a 0%, #151b2e 50%, #181f32 100%);
-  --sidebar-surface: rgba(255, 255, 255, 0.03);
-
-  /* Text colors */
+  --background: #0f172a;
+  --background-secondary: #3247ce;
+  --surface: #0a2756;
+  --sidebar-bg: #1e2a4a;
+  --surface-secondary: #334155;
+  --surface-hover: #475569;
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
-  --text-accent: #06b6d4;
-
-  /* Border colors */
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-light: rgba(255, 255, 255, 0.12);
-  --border-accent: rgba(6, 182, 212, 0.3);
-
-  /* Shadows and effects */
+  --border-color: #334155;
+  --border-light: #475569;
   --border-radius: 12px;
   --border-radius-sm: 8px;
-  --border-radius-lg: 16px;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 12px 24px rgba(0, 0, 0, 0.5);
-  --shadow-glow: 0 0 20px rgba(6, 182, 212, 0.2);
-  --shadow-glow-purple: 0 0 20px rgba(168, 85, 247, 0.2);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.15);
   --transition: all 0.2s ease;
-  --transition-slow: all 0.3s ease;
 
-  /* Glass effect */
-  --glass-bg: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.08);
+  /* Card colors for sidebar - lighter than background */
+  --card-bg: #283550;
+  --card-bg-hover: #324060;
+  --card-border: #3d4f6f;
 }
 
 /* Reset & Base */
@@ -101,26 +71,14 @@ body {
 }
 
 .app-header {
-  background: linear-gradient(135deg, #0d1424 0%, #111827 50%, #0a0f1a 100%);
-  border-bottom: 1px solid var(--border-color);
+  background: linear-gradient(135deg, #2a45cd 0%, #035fa1 50%, #0a2540 100%);
+  border-bottom: 1px solid #1a5a7a;
   color: white;
   padding: 16px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  position: relative;
-}
-
-.app-header::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: var(--accent-gradient);
-  opacity: 0.5;
+  box-shadow: 0 2px 8px rgba(0, 150, 180, 0.15);
 }
 
 .app-header .logo {
@@ -165,18 +123,6 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  position: relative;
-}
-
-.sidebar-panel::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 1px;
-  height: 100%;
-  background: linear-gradient(180deg, var(--primary-color) 0%, var(--secondary-color) 50%, transparent 100%);
-  opacity: 0.3;
 }
 
 .app-footer {
@@ -1210,7 +1156,7 @@ body {
 .sidebar-header {
   padding: 20px;
   border-bottom: 1px solid var(--border-color);
-  background: var(--sidebar-surface);
+  background: var(--card-bg);
 }
 
 .sidebar-header h2 {
@@ -1223,7 +1169,7 @@ body {
 }
 
 .sidebar-header h2 svg {
-  color: var(--primary-color);
+  color: var(--primary-hover);
 }
 
 /* Saved Trip Claims Section */
@@ -1249,8 +1195,8 @@ body {
 }
 
 .current-claim-card {
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
-  border: 1px solid var(--border-accent);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   border-radius: var(--border-radius);
   padding: 14px 16px;
   cursor: pointer;
@@ -1258,8 +1204,8 @@ body {
 }
 
 .current-claim-card:hover {
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%);
-  box-shadow: var(--shadow-glow);
+  background: var(--card-bg-hover);
+  border-color: var(--primary-color);
 }
 
 .current-claim-card.active {
@@ -1306,37 +1252,19 @@ body {
   align-items: center;
   gap: 10px;
   padding: 14px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   border-radius: var(--border-radius);
   transition: var(--transition);
 }
 
 .stat-item:hover {
-  background: var(--surface-hover);
-  border-color: var(--border-light);
-}
-
-.stat-item:first-child {
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.1) 0%, rgba(6, 182, 212, 0.05) 100%);
-  border-color: rgba(6, 182, 212, 0.2);
-}
-
-.stat-item:first-child svg {
-  color: var(--primary-color);
-}
-
-.stat-item:last-child {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(168, 85, 247, 0.05) 100%);
-  border-color: rgba(168, 85, 247, 0.2);
-}
-
-.stat-item:last-child svg {
-  color: var(--secondary-color);
+  background: var(--card-bg-hover);
+  border-color: var(--primary-color);
 }
 
 .stat-item svg {
-  color: var(--primary-color);
+  color: var(--primary-hover);
 }
 
 .stat-content {
@@ -1377,13 +1305,13 @@ body {
   justify-content: space-between;
   font-size: 0.8125rem;
   padding: 6px 10px;
-  background: var(--glass-bg);
+  background: var(--card-bg);
   border-radius: var(--border-radius-sm);
   transition: var(--transition);
 }
 
 .category-item:hover {
-  background: var(--surface-hover);
+  background: var(--card-bg-hover);
 }
 
 .category-name {
@@ -1400,7 +1328,7 @@ body {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: var(--warning-light);
+  background: rgba(245, 158, 11, 0.15);
   border: 1px solid rgba(245, 158, 11, 0.3);
   color: var(--warning-color);
   border-radius: var(--border-radius-sm);
@@ -1428,18 +1356,19 @@ body {
   font-weight: 500;
   cursor: pointer;
   transition: var(--transition);
+  border: none;
 }
 
+/* Export PDF - Red/Coral color */
 .btn-export.primary {
-  background: var(--accent-gradient);
-  border: none;
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   color: white;
-  box-shadow: 0 2px 10px rgba(6, 182, 212, 0.3);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
 .btn-export.primary:hover {
-  background: var(--accent-gradient-hover);
-  box-shadow: 0 4px 15px rgba(6, 182, 212, 0.4);
+  background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
   transform: translateY(-1px);
 }
 
@@ -1449,27 +1378,30 @@ body {
   transform: none;
 }
 
+/* Export Excel - Green color */
 .btn-export.secondary {
-  background: var(--glass-bg);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
 .btn-export.secondary:hover {
-  background: var(--surface-hover);
-  color: var(--text-primary);
-  border-color: var(--border-light);
+  background: linear-gradient(135deg, #34d399 0%, #10b981 100%);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+  transform: translateY(-1px);
 }
 
+/* Export CSV - Blue color */
 .btn-export.tertiary {
-  background: transparent;
-  border: 1px solid var(--border-color);
-  color: var(--text-muted);
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 .btn-export.tertiary:hover {
-  background: var(--glass-bg);
-  color: var(--text-secondary);
+  background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
 }
 
 /* Expense Items Section */
@@ -1487,29 +1419,18 @@ body {
   padding: 14px 20px;
   cursor: pointer;
   border-bottom: 1px solid var(--border-color);
-  background: var(--sidebar-surface);
+  background: var(--card-bg);
   transition: var(--transition);
 }
 
 .section-toggle:hover {
-  background: var(--surface-hover);
+  background: var(--card-bg-hover);
 }
 
 .section-toggle h3 {
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.section-toggle h3::before {
-  content: '';
-  width: 3px;
-  height: 16px;
-  background: var(--accent-gradient);
-  border-radius: 2px;
 }
 
 .section-toggle svg {
@@ -1525,7 +1446,7 @@ body {
   display: flex;
   gap: 8px;
   padding: 12px 20px;
-  background: var(--glass-bg);
+  background: var(--card-bg);
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -1582,12 +1503,12 @@ body {
 }
 
 .expense-list::-webkit-scrollbar-track {
-  background: var(--glass-bg);
+  background: var(--card-bg);
   border-radius: 3px;
 }
 
 .expense-list::-webkit-scrollbar-thumb {
-  background: var(--border-light);
+  background: var(--card-border);
   border-radius: 3px;
 }
 
@@ -1606,14 +1527,9 @@ body {
 }
 
 .empty-state svg {
-  color: var(--border-light);
+  color: var(--card-border);
   margin-bottom: 12px;
-  opacity: 0.5;
-}
-
-.empty-state svg {
-  margin-bottom: 12px;
-  opacity: 0.5;
+  opacity: 0.7;
 }
 
 .empty-state p {
