@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { jsPDF } from 'jspdf';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { format } from 'date-fns';
 import {
   EXPENSE_CATEGORIES,
@@ -49,10 +50,11 @@ function getExtensionFromMimeType(mimeType) {
 }
 
 /**
- * Create a PDF containing all uploaded receipts
+ * Create a PDF containing all uploaded receipts using pdf-lib
+ * This allows proper merging of PDF receipts and embedding of images
  */
 async function createReceiptsPDF(uploadedReceipts, employeeName) {
-  console.log('=== createReceiptsPDF called ===');
+  console.log('=== createReceiptsPDF called (pdf-lib) ===');
   console.log('Number of receipts:', uploadedReceipts?.length || 0);
 
   if (!uploadedReceipts || uploadedReceipts.length === 0) {
@@ -73,186 +75,335 @@ async function createReceiptsPDF(uploadedReceipts, employeeName) {
     });
   });
 
+  try {
+    // Create a new PDF document
+    const pdfDoc = await PDFDocument.create();
+    const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    // Add title page
+    const titlePage = pdfDoc.addPage([595, 842]); // A4 size
+    const { width, height } = titlePage.getSize();
+
+    // Title
+    titlePage.drawText('EXPENSE RECEIPTS', {
+      x: width / 2 - 100,
+      y: height - 80,
+      size: 24,
+      font: helveticaBold,
+      color: rgb(0.13, 0.15, 0.16)
+    });
+
+    let yPos = height - 130;
+
+    if (employeeName) {
+      titlePage.drawText(`Employee: ${employeeName}`, {
+        x: width / 2 - 80,
+        y: yPos,
+        size: 12,
+        font: helveticaFont,
+        color: rgb(0.28, 0.33, 0.41)
+      });
+      yPos -= 20;
+    }
+
+    titlePage.drawText(`Total Receipts: ${uploadedReceipts.length}`, {
+      x: width / 2 - 50,
+      y: yPos,
+      size: 12,
+      font: helveticaFont,
+      color: rgb(0.28, 0.33, 0.41)
+    });
+    yPos -= 20;
+
+    titlePage.drawText(`Generated: ${format(new Date(), 'MMMM d, yyyy')}`, {
+      x: width / 2 - 70,
+      y: yPos,
+      size: 12,
+      font: helveticaFont,
+      color: rgb(0.28, 0.33, 0.41)
+    });
+
+    // Sort receipts by upload date
+    const sortedReceipts = [...uploadedReceipts].sort(
+      (a, b) => new Date(a.uploadedAt) - new Date(b.uploadedAt)
+    );
+
+    // Process each receipt
+    for (let i = 0; i < sortedReceipts.length; i++) {
+      const receipt = sortedReceipts[i];
+      console.log(`\n=== Processing receipt ${i + 1}/${sortedReceipts.length} ===`);
+      console.log('  fileName:', receipt.fileName);
+      console.log('  fileType:', receipt.fileType);
+      console.log('  base64 exists:', !!receipt.base64);
+
+      if (!receipt.base64) {
+        console.log('  ERROR: No base64 data for this receipt!');
+        // Add error page
+        const errorPage = pdfDoc.addPage([595, 842]);
+        errorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
+          x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
+        });
+        errorPage.drawText(`File: ${receipt.fileName}`, {
+          x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+        });
+        errorPage.drawText('Receipt data not available - file was not properly stored.', {
+          x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
+        });
+        continue;
+      }
+
+      // Extract raw base64 data (remove data URL prefix if present)
+      const base64Data = receipt.base64.includes(',')
+        ? receipt.base64.split(',')[1]
+        : receipt.base64;
+      const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+
+      const base64Start = receipt.base64.substring(0, 50).toLowerCase();
+      const isPDF = receipt.fileType === 'application/pdf' || base64Start.includes('data:application/pdf');
+      const isImage = receipt.fileType?.startsWith('image/') || base64Start.includes('data:image');
+
+      console.log('  isPDF:', isPDF, 'isImage:', isImage);
+
+      if (isPDF) {
+        // For PDF files, copy all pages from the source PDF
+        console.log('  Merging PDF pages...');
+        try {
+          const sourcePdf = await PDFDocument.load(binaryData);
+          const pageCount = sourcePdf.getPageCount();
+          console.log(`  Source PDF has ${pageCount} pages`);
+
+          // Add a separator page with receipt info
+          const separatorPage = pdfDoc.addPage([595, 842]);
+          separatorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
+            x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
+          });
+          separatorPage.drawText(`File: ${receipt.fileName}`, {
+            x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+          });
+          const uploadDate = receipt.uploadedAt
+            ? format(new Date(receipt.uploadedAt), 'MMM d, yyyy h:mm a')
+            : 'Unknown';
+          separatorPage.drawText(`Uploaded: ${uploadDate}`, {
+            x: 50, y: 762, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+          });
+          separatorPage.drawText(`Pages: ${pageCount}`, {
+            x: 50, y: 744, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+          });
+
+          // Draw a line separator
+          separatorPage.drawLine({
+            start: { x: 50, y: 720 },
+            end: { x: 545, y: 720 },
+            thickness: 0.5,
+            color: rgb(0.78, 0.78, 0.78)
+          });
+
+          // Info text
+          separatorPage.drawText('The following pages contain the original PDF receipt:', {
+            x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
+          });
+
+          // Copy all pages from source PDF
+          const copiedPages = await pdfDoc.copyPages(sourcePdf, sourcePdf.getPageIndices());
+          copiedPages.forEach((page) => {
+            pdfDoc.addPage(page);
+          });
+
+          console.log(`  SUCCESS: Merged ${pageCount} pages from PDF`);
+        } catch (pdfError) {
+          console.error('  FAILED to merge PDF:', pdfError);
+          // Add error page
+          const errorPage = pdfDoc.addPage([595, 842]);
+          errorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
+            x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
+          });
+          errorPage.drawText(`File: ${receipt.fileName}`, {
+            x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+          });
+          errorPage.drawText('[PDF could not be embedded]', {
+            x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
+          });
+          errorPage.drawText(`Error: ${pdfError.message}`, {
+            x: 50, y: 720, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+          });
+          errorPage.drawText('Original file is available in the receipts/ folder', {
+            x: 50, y: 700, size: 9, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
+          });
+        }
+      } else if (isImage) {
+        // For image files, embed the image
+        console.log('  Embedding image...');
+        try {
+          let image;
+          const isPng = receipt.fileType === 'image/png' || base64Start.includes('data:image/png');
+          const isJpg = receipt.fileType === 'image/jpeg' || base64Start.includes('data:image/jpeg') || base64Start.includes('data:image/jpg');
+
+          if (isPng) {
+            image = await pdfDoc.embedPng(binaryData);
+          } else if (isJpg) {
+            image = await pdfDoc.embedJpg(binaryData);
+          } else {
+            // Try JPEG first (most common), fallback to PNG
+            try {
+              image = await pdfDoc.embedJpg(binaryData);
+            } catch {
+              image = await pdfDoc.embedPng(binaryData);
+            }
+          }
+
+          // Calculate dimensions to fit on page
+          const imgDims = image.scale(1);
+          const maxWidth = 495; // 595 - 2*50 margin
+          const maxHeight = 692; // 842 - 100 top - 50 bottom
+          let scale = 1;
+
+          if (imgDims.width > maxWidth || imgDims.height > maxHeight) {
+            const scaleX = maxWidth / imgDims.width;
+            const scaleY = maxHeight / imgDims.height;
+            scale = Math.min(scaleX, scaleY);
+          }
+
+          const scaledWidth = imgDims.width * scale;
+          const scaledHeight = imgDims.height * scale;
+
+          // Add page with image
+          const imagePage = pdfDoc.addPage([595, 842]);
+
+          // Header
+          imagePage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
+            x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
+          });
+          imagePage.drawText(`File: ${receipt.fileName}`, {
+            x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+          });
+          const uploadDate = receipt.uploadedAt
+            ? format(new Date(receipt.uploadedAt), 'MMM d, yyyy h:mm a')
+            : 'Unknown';
+          imagePage.drawText(`Uploaded: ${uploadDate}`, {
+            x: 50, y: 762, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+          });
+
+          // Draw line
+          imagePage.drawLine({
+            start: { x: 50, y: 750 },
+            end: { x: 545, y: 750 },
+            thickness: 0.5,
+            color: rgb(0.78, 0.78, 0.78)
+          });
+
+          // Center the image
+          const imgX = (595 - scaledWidth) / 2;
+          const imgY = 50; // Bottom margin
+
+          imagePage.drawImage(image, {
+            x: imgX,
+            y: imgY,
+            width: scaledWidth,
+            height: scaledHeight
+          });
+
+          console.log(`  SUCCESS: Image embedded (${scaledWidth.toFixed(0)}x${scaledHeight.toFixed(0)})`);
+        } catch (imgError) {
+          console.error('  FAILED to embed image:', imgError);
+          // Add error page
+          const errorPage = pdfDoc.addPage([595, 842]);
+          errorPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
+            x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
+          });
+          errorPage.drawText(`File: ${receipt.fileName}`, {
+            x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+          });
+          errorPage.drawText('[Image could not be embedded]', {
+            x: 50, y: 740, size: 10, font: helveticaFont, color: rgb(0.73, 0.11, 0.11)
+          });
+          errorPage.drawText(`Error: ${imgError.message}`, {
+            x: 50, y: 720, size: 9, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+          });
+        }
+      } else {
+        // Unsupported format
+        console.log('  Unsupported format');
+        const infoPage = pdfDoc.addPage([595, 842]);
+        infoPage.drawText(`Receipt ${i + 1} of ${sortedReceipts.length}`, {
+          x: 50, y: 800, size: 14, font: helveticaBold, color: rgb(0.13, 0.15, 0.16)
+        });
+        infoPage.drawText(`File: ${receipt.fileName}`, {
+          x: 50, y: 780, size: 11, font: helveticaFont, color: rgb(0.28, 0.33, 0.41)
+        });
+        infoPage.drawText(`File Type: ${receipt.fileType || 'Unknown'}`, {
+          x: 50, y: 760, size: 10, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+        });
+        infoPage.drawText('This file format is not supported for embedding.', {
+          x: 50, y: 720, size: 10, font: helveticaFont, color: rgb(0.42, 0.45, 0.5)
+        });
+        infoPage.drawText('Original file is available in the receipts/ folder', {
+          x: 50, y: 700, size: 10, font: helveticaFont, color: rgb(0.09, 0.64, 0.29)
+        });
+      }
+    }
+
+    // Add page numbers to all pages
+    const pages = pdfDoc.getPages();
+    const totalPages = pages.length;
+    pages.forEach((page, idx) => {
+      const { width } = page.getSize();
+      page.drawText(`Page ${idx + 1} of ${totalPages}`, {
+        x: width / 2 - 30,
+        y: 20,
+        size: 8,
+        font: helveticaFont,
+        color: rgb(0.61, 0.64, 0.69)
+      });
+    });
+
+    console.log('=== Receipts PDF created successfully ===');
+    console.log(`Total pages: ${totalPages}`);
+
+    // Return as ArrayBuffer
+    return await pdfDoc.save();
+  } catch (error) {
+    console.error('Failed to create receipts PDF:', error);
+    // Fallback to simple jsPDF implementation
+    return createSimpleReceiptsPDF(uploadedReceipts, employeeName);
+  }
+}
+
+/**
+ * Fallback: Create a simple PDF listing receipts (no embedding)
+ */
+function createSimpleReceiptsPDF(uploadedReceipts, employeeName) {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 20;
   let yPosition = margin;
 
-  // Title page
   doc.setFontSize(24);
-  doc.setTextColor(33, 37, 41);
   doc.setFont('helvetica', 'bold');
   doc.text('EXPENSE RECEIPTS', pageWidth / 2, yPosition + 30, { align: 'center' });
   yPosition += 50;
 
   doc.setFontSize(12);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(71, 85, 105);
-
   if (employeeName) {
     doc.text(`Employee: ${employeeName}`, pageWidth / 2, yPosition, { align: 'center' });
     yPosition += 10;
   }
-
   doc.text(`Total Receipts: ${uploadedReceipts.length}`, pageWidth / 2, yPosition, { align: 'center' });
-  yPosition += 10;
-  doc.text(`Generated: ${format(new Date(), 'MMMM d, yyyy')}`, pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 30;
 
-  // Sort receipts by upload date
-  const sortedReceipts = [...uploadedReceipts].sort(
-    (a, b) => new Date(a.uploadedAt) - new Date(b.uploadedAt)
-  );
-
-  // Add each receipt
-  for (let i = 0; i < sortedReceipts.length; i++) {
-    const receipt = sortedReceipts[i];
-    console.log(`\n=== Processing receipt ${i + 1}/${sortedReceipts.length} ===`);
-    console.log('  fileName:', receipt.fileName);
-    console.log('  fileType:', receipt.fileType);
-    console.log('  base64 exists:', !!receipt.base64);
-    console.log('  base64 length:', receipt.base64?.length || 0);
-
-    doc.addPage();
-    yPosition = margin;
-
-    // Receipt header
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(33, 37, 41);
-    doc.text(`Receipt ${i + 1} of ${sortedReceipts.length}`, margin, yPosition);
+  doc.setFontSize(10);
+  uploadedReceipts.forEach((receipt, idx) => {
+    if (yPosition > 270) {
+      doc.addPage();
+      yPosition = margin;
+    }
+    doc.text(`${idx + 1}. ${receipt.fileName}`, margin, yPosition);
     yPosition += 8;
+  });
 
-    doc.setFontSize(11);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(71, 85, 105);
-    doc.text(`File: ${receipt.fileName}`, margin, yPosition);
-    yPosition += 6;
+  doc.text('Note: Original receipt files are available in the receipts/ folder of the zip.', margin, yPosition + 20);
 
-    doc.setFontSize(9);
-    doc.setTextColor(107, 114, 128);
-    const uploadDate = receipt.uploadedAt ? format(new Date(receipt.uploadedAt), 'MMM d, yyyy h:mm a') : 'Unknown';
-    doc.text(`Uploaded: ${uploadDate}`, margin, yPosition);
-    yPosition += 15;
-
-    // Draw separator line
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.5);
-    doc.line(margin, yPosition, pageWidth - margin, yPosition);
-    yPosition += 10;
-
-    // Check if we have base64 data
-    if (!receipt.base64) {
-      console.log('  ERROR: No base64 data for this receipt!');
-      doc.setFillColor(254, 242, 242);
-      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 50, 3, 3, 'F');
-      doc.setFontSize(10);
-      doc.setTextColor(185, 28, 28);
-      doc.text('Receipt image data not available', margin + 10, yPosition + 20);
-      doc.setTextColor(107, 114, 128);
-      doc.text('The receipt file was not properly stored.', margin + 10, yPosition + 35);
-      continue;
-    }
-
-    // Check if it's an image based on data URL or file type
-    const base64Start = receipt.base64.substring(0, 30).toLowerCase();
-    const isImage = receipt.fileType?.startsWith('image/') ||
-                    base64Start.includes('data:image');
-
-    console.log('  base64 starts with:', base64Start);
-    console.log('  isImage:', isImage);
-
-    if (isImage) {
-      try {
-        const imgWidth = pageWidth - 2 * margin;
-        const maxHeight = pageHeight - yPosition - margin - 20;
-
-        // Detect format from data URL or file type
-        let imgFormat = 'JPEG';
-        if (base64Start.includes('data:image/png') || receipt.fileType === 'image/png') {
-          imgFormat = 'PNG';
-        } else if (base64Start.includes('data:image/gif') || receipt.fileType === 'image/gif') {
-          imgFormat = 'GIF';
-        } else if (base64Start.includes('data:image/webp') || receipt.fileType === 'image/webp') {
-          imgFormat = 'WEBP';
-        }
-
-        console.log('  Using image format:', imgFormat);
-        console.log('  Image dimensions: width=', imgWidth, 'maxHeight=', maxHeight);
-
-        // Add the image (scaled to fit)
-        doc.addImage(receipt.base64, imgFormat, margin, yPosition, imgWidth, Math.min(maxHeight, 180), undefined, 'MEDIUM');
-        console.log('  SUCCESS: Image added to PDF');
-      } catch (err) {
-        console.error('  FAILED to embed receipt image:', err);
-        console.error('  Error details:', err.message, err.stack);
-        doc.setFillColor(254, 242, 242);
-        doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 50, 3, 3, 'F');
-        doc.setFontSize(10);
-        doc.setTextColor(185, 28, 28);
-        doc.text('[Image could not be embedded]', margin + 10, yPosition + 15);
-        doc.setTextColor(107, 114, 128);
-        doc.text(`Error: ${err.message}`, margin + 10, yPosition + 30);
-        doc.text(`Format attempted: ${imgFormat || 'Unknown'}`, margin + 10, yPosition + 42);
-      }
-    } else if (receipt.fileType === 'application/pdf' || base64Start.includes('data:application/pdf')) {
-      // For PDF files, show info box pointing to the original file in the zip
-      console.log('  PDF file detected, showing info box with reference to receipts folder');
-      doc.setFillColor(240, 249, 255); // Light blue background
-      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 70, 3, 3, 'F');
-      doc.setDrawColor(59, 130, 246);
-      doc.setLineWidth(0.5);
-      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 70, 3, 3, 'S');
-
-      doc.setFontSize(11);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(30, 64, 175);
-      doc.text('PDF Receipt', margin + 10, yPosition + 15);
-
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(71, 85, 105);
-      doc.text(`File: ${receipt.fileName}`, margin + 10, yPosition + 30);
-
-      doc.setFont('helvetica', 'italic');
-      doc.setTextColor(22, 163, 74); // Green color
-      doc.text('Original PDF included in: receipts/ folder', margin + 10, yPosition + 45);
-
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(107, 114, 128);
-      doc.text('Open the PDF from the receipts folder for full details', margin + 10, yPosition + 58);
-      yPosition += 80;
-    } else {
-      // For unsupported formats, show info box
-      console.log('  Unsupported format, showing info box');
-      doc.setFillColor(248, 250, 252);
-      doc.roundedRect(margin, yPosition, pageWidth - 2 * margin, 50, 3, 3, 'F');
-      doc.setFontSize(10);
-      doc.setTextColor(71, 85, 105);
-      doc.text(`File Name: ${receipt.fileName}`, margin + 10, yPosition + 15);
-      doc.text(`File Type: ${receipt.fileType || 'Unknown'}`, margin + 10, yPosition + 28);
-      doc.text('(This file format is not supported for embedding)', margin + 10, yPosition + 41);
-    }
-  }
-
-  // Add page numbers
-  const totalPages = doc.internal.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(156, 163, 175);
-    doc.text(
-      `Page ${i} of ${totalPages}`,
-      pageWidth / 2,
-      pageHeight - 10,
-      { align: 'center' }
-    );
-  }
-
-  console.log('=== Receipts PDF created successfully ===');
-
-  // Return as ArrayBuffer
   return doc.output('arraybuffer');
 }
 
@@ -1112,15 +1263,23 @@ async function populateOriginalTemplateExcelJS(expenses, companyTemplate, claimI
     const expense = expandedExpenses[expenseIndex];
     const rowIndex = dataStartRow + expenseIndex;
 
-    // Get the local currency and exchange rate
-    const localCurrency = (expense.currency || 'SGD').toUpperCase();
+    // Get the local currency (original currency from receipt, before any conversion)
+    // Priority: currencyConversion.originalCurrency > currency > 'SGD'
+    // This ensures Amount (Local) shows the ACTUAL receipt currency, not the reimbursement currency
+    const localCurrency = (
+      expense.currencyConversion?.originalCurrency ||
+      expense.currency ||
+      'SGD'
+    ).toUpperCase();
     const exchangeRate = exchangeRates[localCurrency] || 1;
     const isSGD = localCurrency === 'SGD';
 
     // Log for first row to debug column mapping
     if (expenseIndex === 0) {
       console.log('Template columns:', companyTemplate.columns);
-      console.log('First expense currency:', localCurrency, 'isSGD:', isSGD, 'exchangeRate:', exchangeRate);
+      console.log('First expense - currency:', expense.currency,
+                  'currencyConversion:', expense.currencyConversion,
+                  'localCurrency:', localCurrency, 'isSGD:', isSGD, 'exchangeRate:', exchangeRate);
     }
 
     companyTemplate.columns.forEach((colName, idx) => {
